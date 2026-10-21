@@ -17,11 +17,18 @@ spec:
     automountServiceAccountToken: false
     minReplicas: 1
     maxReplicas: 1
+    # Exists rather than Equal: GPU node taints carry different values on
+    # different clusters (`true` on some, `l40-gpu`, `a10g` and so on
+    # elsewhere). Matching on the key alone tolerates all of them.
     tolerations:
       - key: nvidia.com/gpu
-        operator: Equal
-        value: "true"
+        operator: Exists
         effect: NoSchedule
+    # Keep the 7B model on the large GPU. The label is published by NVIDIA GPU
+    # Feature Discovery; change the value to match your hardware, or drop the
+    # block entirely on a cluster with uniform GPUs.
+    nodeSelector:
+      nvidia.com/gpu.product: NVIDIA-L40S
     model:
       modelFormat:
         name: vLLM

@@ -15,11 +15,16 @@ spec:
     automountServiceAccountToken: false
     minReplicas: 1
     maxReplicas: 1
+    # See the note in qwen-inferenceservice.yaml — match the taint key only.
     tolerations:
       - key: nvidia.com/gpu
-        operator: Equal
-        value: "true"
+        operator: Exists
         effect: NoSchedule
+    # Pin the small model to the small GPU, leaving the large one entirely to
+    # Qwen. The label is published by NVIDIA GPU Feature Discovery. Remove this
+    # block on a cluster with uniform GPUs.
+    nodeSelector:
+      nvidia.com/gpu.product: Tesla-T4
     model:
       modelFormat:
         name: vLLM
@@ -42,3 +47,9 @@ spec:
         - "0.90"
         - --max-num-seqs
         - "2"
+        # The T4 is Turing (compute capability 7.5) and has no native bfloat16,
+        # so vLLM must be told to use float16 explicitly — otherwise it refuses
+        # to start on a model whose config declares bfloat16. Drop this on
+        # Ampere or newer.
+        - --dtype
+        - float16
