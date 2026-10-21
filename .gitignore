@@ -1,0 +1,12 @@
+# Rendered manifests (wire-endpoints.sh streams to oc apply, but --print output
+# is sometimes saved for inspection)
+.rendered/
+*.rendered.yaml
+
+# Local overrides
+.env
+kubeconfig
+*.kubeconfig
+
+.DS_Store
+*.swp

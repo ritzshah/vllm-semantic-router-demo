@@ -1,0 +1,39 @@
+# models  — the four ModernBERT classifiers plus the MiniLM embedding model
+#           (~4 GB), downloaded once by the init container.
+# cache   — Hugging Face / transformers download cache, kept separate so the
+#           model volume stays clean and can be reused across router restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: semantic-router-models
+  namespace: models
+  labels:
+    app: semantic-router
+    component: storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeMode: Filesystem
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: semantic-router-cache
+  namespace: models
+  labels:
+    app: semantic-router
+    component: storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  volumeMode: Filesystem

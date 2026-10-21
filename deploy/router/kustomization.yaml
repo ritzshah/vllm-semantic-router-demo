@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: models
+# NOTE: 03-configmap-router.yaml ships with __QWEN_ENDPOINT_IP__ /
+# __PHI_ENDPOINT_IP__ placeholders. Run scripts/wire-endpoints.sh before
+# applying this overlay directly, or just use scripts/deploy.sh.
+resources:
+  - 01-serviceaccount.yaml
+  - 02-pvcs.yaml
+  - 03-configmap-router.yaml
+  - 04-configmap-envoy.yaml
+  - 05-deployment.yaml
+  - 06-service.yaml
+  - 07-route.yaml

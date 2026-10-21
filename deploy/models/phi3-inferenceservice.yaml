@@ -1,0 +1,44 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: phi-3-mini-chat
+  namespace: models
+  annotations:
+    openshift.io/display-name: phi-3-mini-chat
+    # See the note in qwen-inferenceservice.yaml about Standard vs RawDeployment.
+    serving.kserve.io/deploymentMode: Standard
+    security.opendatahub.io/enable-auth: "false"
+    networking.kserve.io/visibility: exposed
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  predictor:
+    automountServiceAccountToken: false
+    minReplicas: 1
+    maxReplicas: 1
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+    model:
+      modelFormat:
+        name: vLLM
+      name: ""
+      runtime: vllm-cuda-runtime-phi3
+      storageUri: hf://microsoft/Phi-3-mini-128k-instruct
+      resources:
+        requests:
+          cpu: "1"
+          memory: 4Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "2"
+          memory: 6Gi
+          nvidia.com/gpu: "1"
+      args:
+        - --max-model-len
+        - "8192"
+        - --gpu-memory-utilization
+        - "0.90"
+        - --max-num-seqs
+        - "2"

@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semantic-router-demo-ui
+  namespace: models
+  labels:
+    app: semantic-router-demo-ui
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: semantic-router-demo-ui
+  template:
+    metadata:
+      labels:
+        app: semantic-router-demo-ui
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: nginx
+        # UBI nginx: public on registry.access.redhat.com (no pull secret, no
+        # Docker Hub rate limit during a live demo) and already non-root.
+        image: registry.access.redhat.com/ubi9/nginx-126:latest
+        command: ["/usr/sbin/nginx", "-g", "daemon off;"]
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+          readOnly: true
+        - name: ui
+          mountPath: /opt/app-root/src
+          readOnly: true
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: semantic-router-demo-nginx
+      - name: ui
+        configMap:
+          name: semantic-router-demo-ui

@@ -1,0 +1,209 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semantic-router
+  namespace: models
+  labels:
+    app: semantic-router
+    component: gateway
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: semantic-router
+      component: gateway
+  # Recreate, not RollingUpdate: both PVCs are ReadWriteOnce, so a second pod
+  # would block on volume attachment and the rollout would never finish.
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: semantic-router
+        component: gateway
+    spec:
+      serviceAccountName: semantic-router
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      # Pulls the classifier and embedding models onto the PVC. Runs once; on
+      # subsequent restarts every snapshot_download is skipped because the
+      # directory already exists, so pod restarts are fast.
+      - name: model-downloader
+        image: python:3.11-slim
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -e
+          pip install --no-cache-dir --user huggingface_hub
+          python3 << 'PYEOF'
+          import os
+          from huggingface_hub import snapshot_download
+
+          models = [
+            ("LLM-Semantic-Router/category_classifier_modernbert-base_model", "category_classifier_modernbert-base_model"),
+            ("LLM-Semantic-Router/pii_classifier_modernbert-base_model", "pii_classifier_modernbert-base_model"),
+            ("LLM-Semantic-Router/jailbreak_classifier_modernbert-base_model", "jailbreak_classifier_modernbert-base_model"),
+            ("LLM-Semantic-Router/pii_classifier_modernbert-base_presidio_token_model", "pii_classifier_modernbert-base_presidio_token_model"),
+            ("sentence-transformers/all-MiniLM-L12-v2", "all-MiniLM-L12-v2")
+          ]
+
+          for repo_id, local_dir_name in models:
+            local_dir = os.path.join("/app/models", local_dir_name)
+            if not os.path.exists(local_dir):
+              print(f"downloading {repo_id}", flush=True)
+              snapshot_download(repo_id=repo_id, local_dir=local_dir, cache_dir="/app/cache/hf")
+            else:
+              print(f"already present: {local_dir_name}", flush=True)
+
+          # The semantic cache defaults to models/mom-embedding-light, which is
+          # gated on the Hub. Alias it to MiniLM so the cache initialises
+          # without requiring Hugging Face credentials.
+          src = "/app/models/all-MiniLM-L12-v2"
+          dst = "/app/models/mom-embedding-light"
+          if os.path.exists(src) and not os.path.exists(dst):
+            import shutil
+            shutil.copytree(src, dst)
+            print("aliased mom-embedding-light -> all-MiniLM-L12-v2", flush=True)
+          PYEOF
+        env:
+        - name: HF_HUB_CACHE
+          value: /app/cache/hf
+        - name: HF_HOME
+          value: /app/cache/hf
+        - name: TRANSFORMERS_CACHE
+          value: /app/cache/transformers
+        - name: PIP_CACHE_DIR
+          value: /tmp/pip_cache
+        - name: PYTHONUSERBASE
+          value: /tmp/python_user
+        - name: PATH
+          value: /tmp/python_user/bin:/usr/local/bin:/usr/bin:/bin
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: "1"
+            memory: 2Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: models-volume
+          mountPath: /app/models
+        - name: cache-volume
+          mountPath: /app/cache
+      containers:
+      - name: semantic-router
+        image: ghcr.io/vllm-project/semantic-router/extproc:latest
+        imagePullPolicy: Always
+        env:
+        - name: LD_LIBRARY_PATH
+          value: /app/lib
+        - name: HF_HOME
+          value: /app/cache/hf
+        - name: TRANSFORMERS_CACHE
+          value: /app/cache/transformers
+        - name: SENTENCE_TRANSFORMERS_HOME
+          value: /app/cache/sentence_transformers
+        - name: XDG_CACHE_HOME
+          value: /app/cache/xdg
+        - name: HOME
+          value: /tmp/home
+        ports:
+        - name: grpc
+          containerPort: 50051
+        - name: metrics
+          containerPort: 9190
+        - name: classify-api
+          containerPort: 8080
+        # Loading four ModernBERT models on CPU takes a couple of minutes on a
+        # cold start. The startup probe gives it up to 10 minutes before the
+        # kubelet decides the container is broken.
+        startupProbe:
+          tcpSocket:
+            port: 50051
+          periodSeconds: 10
+          failureThreshold: 60
+        readinessProbe:
+          tcpSocket:
+            port: 50051
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          requests:
+            cpu: 1500m
+            memory: 4Gi
+          limits:
+            cpu: "3"
+            memory: 8Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        - name: models-volume
+          mountPath: /app/models
+        - name: cache-volume
+          mountPath: /app/cache
+      - name: envoy-proxy
+        image: envoyproxy/envoy:v1.35.3
+        command: ["/usr/local/bin/envoy"]
+        args:
+        - -c
+        - /etc/envoy/envoy.yaml
+        - --component-log-level
+        - ext_proc:info,router:info,http:info
+        ports:
+        - name: envoy-http
+          containerPort: 8801
+        - name: envoy-admin
+          containerPort: 19000
+        readinessProbe:
+          tcpSocket:
+            port: 8801
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: envoy-config-volume
+          mountPath: /etc/envoy
+          readOnly: true
+      volumes:
+      - name: config-volume
+        configMap:
+          name: semantic-router-config
+      - name: envoy-config-volume
+        configMap:
+          name: semantic-router-envoy-config
+      - name: models-volume
+        persistentVolumeClaim:
+          claimName: semantic-router-models
+      - name: cache-volume
+        persistentVolumeClaim:
+          claimName: semantic-router-cache

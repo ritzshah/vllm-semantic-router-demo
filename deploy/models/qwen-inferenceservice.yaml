@@ -1,0 +1,47 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen-25-7b
+  namespace: models
+  annotations:
+    openshift.io/display-name: qwen-2.5-7b-instruct
+    # RHOAI 2.16+/3.x normalizes "RawDeployment" to "Standard". Keeping "Standard"
+    # here avoids a permanent Argo CD OutOfSync. On older controllers that do not
+    # know "Standard", change this to "RawDeployment".
+    serving.kserve.io/deploymentMode: Standard
+    security.opendatahub.io/enable-auth: "false"
+    networking.kserve.io/visibility: exposed
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  predictor:
+    automountServiceAccountToken: false
+    minReplicas: 1
+    maxReplicas: 1
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+    model:
+      modelFormat:
+        name: vLLM
+      name: ""
+      runtime: vllm-cuda-runtime-qwen
+      storageUri: hf://Qwen/Qwen2.5-7B-Instruct
+      resources:
+        requests:
+          cpu: "2"
+          memory: 8Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "2"
+          memory: 8Gi
+          nvidia.com/gpu: "1"
+      args:
+        - --max-model-len
+        - "20000"
+        - --gpu-memory-utilization
+        - "0.90"
+        - --enable-auto-tool-choice
+        - --tool-call-parser
+        - hermes

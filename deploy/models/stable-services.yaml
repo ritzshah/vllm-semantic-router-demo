@@ -1,0 +1,47 @@
+# Stable ClusterIP Services in front of the KServe predictors.
+#
+# Why these exist: Envoy's ORIGINAL_DST cluster in the router resolves the
+# x-vsr-destination-endpoint header as a literal IP:port — it performs no DNS
+# lookup. The router config therefore needs an IP address per backend, and these
+# Services give us an IP that survives InferenceService redeploys (the predictor
+# Services that KServe generates are recreated on every revision).
+#
+# scripts/wire-endpoints.sh reads the ClusterIPs of these two Services and
+# substitutes them into the router ConfigMap at deploy time.
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen-25-7b-predictor-stable
+  namespace: models
+  labels:
+    app: semantic-router-demo
+    component: backend
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+spec:
+  type: ClusterIP
+  selector:
+    app: isvc.qwen-25-7b-predictor
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phi-3-mini-chat-predictor-stable
+  namespace: models
+  labels:
+    app: semantic-router-demo
+    component: backend
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+spec:
+  type: ClusterIP
+  selector:
+    app: isvc.phi-3-mini-chat-predictor
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: models
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - route.yaml
+
+# The console is generated straight from the files in ui/, so editing a use
+# case is a text edit plus `oc apply -k` — no image build, no registry push.
+configMapGenerator:
+  - name: semantic-router-demo-ui
+    files:
+      - ui/index.html
+      - ui/app.js
+      - ui/usecases.js
+      - ui/styles.css
+  - name: semantic-router-demo-nginx
+    files:
+      - nginx.conf
+
+# Hash suffixes are enabled (the default) so that editing the UI rolls the
+# Deployment automatically instead of leaving a stale pod serving old content.
+generatorOptions:
+  disableNameSuffixHash: false

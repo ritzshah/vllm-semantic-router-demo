@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vLLM Semantic Router — Demo Console</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23ee0000'/></svg>">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="mark" aria-hidden="true"></div>
+    <h1>Semantic Router</h1>
+    <span class="sub">vLLM &middot; OpenShift AI</span>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="tally" id="tally" aria-live="polite">
+    <span class="t-qwen"    title="Requests served by qwen-25-7b">7B&nbsp;<b id="n-qwen">0</b></span>
+    <span class="t-phi"     title="Requests served by phi-3-mini-chat">3.8B&nbsp;<b id="n-phi">0</b></span>
+    <span class="t-cached"  title="Answers served from the semantic cache">cached&nbsp;<b id="n-cached">0</b></span>
+    <span class="t-blocked" title="Requests stopped by a guardrail">blocked&nbsp;<b id="n-blocked">0</b></span>
+  </div>
+
+  <div class="endpoint">
+    <label for="base-url">API</label>
+    <input id="base-url" type="text" spellcheck="false"
+           title="Base URL of the semantic router. Leave as-is when this page is served from the cluster.">
+  </div>
+
+  <div class="status">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-text">checking…</span>
+  </div>
+
+  <div class="zoom">
+    <button id="zoom-out" title="Smaller text">A&minus;</button>
+    <button id="zoom-in"  title="Larger text">A+</button>
+    <button id="help-btn" title="Keyboard shortcuts">?</button>
+  </div>
+</header>
+
+<main>
+  <nav id="sidebar" aria-label="Demo use cases"></nav>
+  <section id="content"></section>
+</main>
+
+<dialog id="help">
+  <h3>Keyboard shortcuts</h3>
+  <table>
+    <tr><td><kbd>&darr;</kbd> / <kbd>j</kbd></td><td>Next use case</td></tr>
+    <tr><td><kbd>&uarr;</kbd> / <kbd>k</kbd></td><td>Previous use case</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Run the selected use case</td></tr>
+    <tr><td><kbd>r</kbd></td><td>Re-run</td></tr>
+    <tr><td><kbd>c</kbd></td><td>Clear results and counters</td></tr>
+    <tr><td><kbd>1</kbd>&hellip;<kbd>9</kbd></td><td>Jump to use case <i>n</i></td></tr>
+    <tr><td><kbd>?</kbd></td><td>This dialog</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Close</td></tr>
+  </table>
+  <p style="color:var(--text-faint);font-size:0.8rem;margin-top:1rem">
+    Shortcuts are ignored while you are typing in a prompt box. Every prompt is
+    editable — edit it and press Run to show the routing change live.
+  </p>
+  <form method="dialog" style="margin-top:1rem">
+    <button class="ghost-btn">Close</button>
+  </form>
+</dialog>
+
+<script src="usecases.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

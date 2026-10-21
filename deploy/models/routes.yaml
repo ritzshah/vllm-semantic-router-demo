@@ -1,0 +1,35 @@
+# Direct Routes to each model, bypassing the semantic router.
+# Used by the "pinned model vs auto" demo and for debugging a backend in isolation.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: qwen-25-7b
+  namespace: models
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  to:
+    kind: Service
+    name: qwen-25-7b-predictor
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: phi-3-mini-chat
+  namespace: models
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  to:
+    kind: Service
+    name: phi-3-mini-chat-predictor
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

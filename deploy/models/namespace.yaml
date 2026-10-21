@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: models
+  annotations:
+    openshift.io/display-name: vLLM Semantic Router Demo
+    argocd.argoproj.io/sync-wave: "-10"
