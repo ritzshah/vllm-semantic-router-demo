@@ -203,17 +203,38 @@ A coding prompt is used here deliberately: the `coding` family of decisions
 carries an explicit `semantic-cache` plugin, so the behaviour does not depend on
 the global default.
 
-### `cache-paraphrase` — same question, different words
+### `cache-precision` — the near-miss it must refuse
 
-> Run 1: Explain the difference between a Python list and a tuple, and when to use each.
+> Step 1: Explain the difference between a Python list and a tuple, and when to use each.
 >
-> Run 2: What's the distinction between a tuple and a list in Python, and when
-> should I pick one over the other?
+> Step 2: Explain the difference between a Python **set** and a **dict**, and when to use each.
 
-Almost no shared wording. The Vela embeddings sit above the 0.92 cosine
-threshold, so run 2 is a cache hit. This is what makes the cache *semantic*
-rather than a hash lookup, and it is the case that justifies the embedding model
-to a sceptical audience.
+Two words different, completely different question. It must come from a model,
+not from the cache — and it does.
+
+This case started life as a paraphrase demo ("same question, different words,
+same cached answer"). Measuring it on a real deployment killed that idea, and
+the measurement is more interesting than the demo would have been:
+
+| Request, against a cached "…list and a tuple…" | similarity |
+|---|---:|
+| Identical repeat | **1.0000** |
+| "…**set** and a **dict**…" — a *different* question | **0.9431** |
+| "What's the distinction between a tuple and a list in Python…" — a *true paraphrase* | **0.8555** |
+
+**The lexically similar wrong question scores higher than the genuine
+paraphrase.** Embedding similarity tracks phrasing at least as much as meaning.
+No threshold separates those two cases, and at the original 0.92 you get the
+worst of both: the paraphrase misses *and* the wrong-answer hit succeeds. At
+0.85 the router will cheerfully answer a question about sets and dicts with a
+cached explanation of lists and tuples — verified, not hypothetical.
+
+So the threshold is **0.95**: repeats are cached, everything else goes to a
+model. Lower hit rate, no wrong answers.
+
+Say this part out loud. An audience that has read a vendor slide about semantic
+caching has been told it understands meaning. Showing the number where it does
+not is worth more than another green tick.
 
 ### `cost-auto-vs-pinned` — the before and after
 

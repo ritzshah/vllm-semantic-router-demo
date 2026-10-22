@@ -122,9 +122,6 @@ data:
         user_feedbacks:
         - name: correction_needed
           description: User indicates prior answer was incorrect or insufficient
-        preferences:
-        - name: complex_reasoning
-          description: Preference for deeper reasoning responses
         language:
         - name: en
           description: English-language requests
@@ -139,24 +136,33 @@ data:
           description: Long-context requests
         complexity:
         - name: code_complexity
-          threshold: 0.7
+          threshold: 0.36
           description: Coding difficulty estimate
           hard:
             candidates:
-            - design distributed system
-            - optimize concurrent processing architecture
-            - debug race condition in multithreaded service
+            - design a distributed system that stays consistent under partition
+            - optimize a concurrent processing architecture for throughput
+            - debug a race condition in a multithreaded service with a shared map
+            - diagnose a deadlock between goroutines holding overlapping locks
           easy:
             candidates:
+            - write a python function that iterates over a list and returns the sum of its values
+            - write a simple function to add up the numbers in a list
             - print hello world
-            - read file and return content
-            - iterate list and sum values
+            - read a file and return its contents
+            - reverse a string and return the result
         pii:
         - name: pii_detected
-          threshold: 0.5
+          threshold: 0.4
           pii_types_allowed:
           - DATE_TIME
-          description: Detect requests containing sensitive PII content
+          - GPE
+          - NRP
+          - ORGANIZATION
+          - TITLE
+          - AGE
+          - DOMAIN_NAME
+          description: Direct identifiers only — generic entities (dates, places, orgs, titles) are allowed
         jailbreak:
         - name: jailbreak_standard
           method: classifier
@@ -345,7 +351,8 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.92
+            similarity_threshold: 0.95
+            scope: global
       - name: user_feedback_escalation
         description: Escalate correction requests to stronger model with anti-hallucination guidance
         priority: 220
@@ -383,7 +390,8 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.93
+            similarity_threshold: 0.95
+            scope: global
       - name: coding_easy_complexity
         description: 'Complexity-aware scaling: easy coding tasks -> phi'
         priority: 140
@@ -399,7 +407,8 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.9
+            similarity_threshold: 0.95
+            scope: global
       - name: block_jailbreak_keywords
         description: Deterministic jailbreak guardrail using keyword patterns
         priority: 1100
@@ -449,7 +458,8 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.92
+            similarity_threshold: 0.95
+            scope: global
       - name: math
         description: 'Signal-decision route: math keyword or domain -> qwen'
         priority: 120
@@ -469,7 +479,8 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.92
+            similarity_threshold: 0.95
+            scope: global
       - name: general
         description: 'Signal-decision route: general chat keyword -> phi'
         priority: 90
@@ -504,8 +515,6 @@ data:
             name: needs_verification
           - type: user_feedback
             name: correction_needed
-          - type: preference
-            name: complex_reasoning
           - type: language
             name: en
           - type: context

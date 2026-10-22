@@ -531,24 +531,33 @@ const USE_CASES = [
     ],
   },
   {
-    id: 'cache-paraphrase',
+    id: 'cache-precision',
     group: 'Cache & cost',
-    title: 'Semantic cache — reworded question',
-    subtitle: 'Different words. Same meaning. Same cached answer.',
-    decision: 'coding + semantic-cache plugin (threshold 0.92)',
+    title: 'Semantic cache — the near-miss it refuses',
+    subtitle: 'Two words different. Must not be answered from cache.',
+    decision: 'coding + response_cache plugin (threshold 0.95)',
     expect: { model: MODELS.QWEN },
     why:
-      'This is what makes the cache *semantic* rather than a hash lookup. The two ' +
-      'prompts share almost no exact wording, but their Vela embeddings sit above the ' +
-      '0.92 cosine threshold, so the second one is served from the cache. Raising the ' +
-      'threshold trades hit rate for precision — the hard-coding decision uses 0.93 for ' +
-      'exactly that reason.',
+      'A cache that is too eager is worse than no cache, because it returns a ' +
+      'confident answer to a question nobody asked. Step two differs from step ' +
+      'one by two words — set and dict instead of list and tuple — and it must ' +
+      'come back from a model, not from the cache. Measured on this deployment: ' +
+      'an identical repeat scores 1.0000, this near-miss scores 0.9431, and a ' +
+      'full reword of the original question scores only 0.8555. Note the order: ' +
+      'the lexically similar *different* question scores higher than the ' +
+      'genuine paraphrase. Embedding similarity tracks wording at least as much ' +
+      'as meaning, so the threshold is set at 0.95 to buy precision — repeats ' +
+      'are cached, anything less is not.',
     talk:
-      'Nobody phrases a question the same way twice. A key-value cache would miss this ' +
-      'completely. An embedding cache sees that these are the same question.',
+      'Same shape, two words changed, completely different question. It has to ' +
+      'miss — and it does. Here is the uncomfortable part: a full reword of the ' +
+      'original scores lower than this does. The cache is matching phrasing as ' +
+      'much as meaning, so I set the threshold for precision and accept a lower ' +
+      'hit rate. A cache that confidently answers the wrong question is the one ' +
+      'failure you cannot explain to a customer.',
     steps: [
       {
-        label: 'Run 1 — original wording',
+        label: 'Prime the cache',
         body: {
           model: 'auto',
           messages: [
@@ -563,15 +572,14 @@ const USE_CASES = [
         },
       },
       {
-        label: 'Run 2 — reworded',
-        expect: { cached: true, model: MODELS.QWEN },
+        label: 'Two words different — must miss',
         body: {
           model: 'auto',
           messages: [
             {
               role: 'user',
               content:
-                "What's the distinction between a tuple and a list in Python, and when should I pick one over the other?",
+                'Explain the difference between a Python set and a dict, and when to use each.',
             },
           ],
           temperature: 0,
@@ -580,6 +588,7 @@ const USE_CASES = [
       },
     ],
   },
+
   {
     id: 'cost-auto-vs-pinned',
     group: 'Cache & cost',

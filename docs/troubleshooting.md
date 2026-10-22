@@ -109,12 +109,29 @@ setting `pii_types_allowed: [DATE_TIME]`. A real contact record still blocks —
 it has a person, a phone number and an email to score on.
 
 **The complexity bands swallowed everything.** With
-`signals.complexity.code_complexity.threshold: 0.1`, nearly every prompt
-matched the easy or hard band, so `coding_easy_complexity` (priority 140)
-outranked and absorbed prompts meant for `math` (120) and `coding` (130) — a
-calculus question was being answered by the small model. Raised to 0.7, which
-leaves the bands firing only on prompts genuinely close to the candidate
-phrases.
+`signals.complexity.code_complexity.threshold: 0.1`, nearly every prompt landed
+in the easy or hard band, so `coding_easy_complexity` (priority 140) outranked
+and absorbed prompts meant for `math` (120) and `coding` (130) — a calculus
+question was being answered by the small model.
+
+The fix is not "raise it until it stops", because the threshold is a **margin
+between two scores**, not a similarity floor: `signal = hard_score -
+easy_score`, and a band fires only when `|signal| > threshold`. Raising it to
+0.55 went too far the other way and killed both complexity decisions outright.
+The router logs the arithmetic, so measure instead of guessing:
+
+```bash
+oc logs -n models deploy/semantic-router -c semantic-router --tail=200 \
+  | grep "Complexity rule"
+# Complexity rule 'code_complexity': hard_score=0.446, easy_score=0.966,
+#   signal=-0.520, difficulty=medium
+```
+
+Run your prompts through, read off the signals, and pick a threshold between
+the cases you want banded and the ones you do not. Here that was −0.520 for the
+easy prompt against −0.208 for the nearest non-easy one, so **0.36**. Full
+explanation in
+[architecture](architecture.md#the-complexity-signal-is-a-difference-not-a-score).
 
 **The jailbreak classifier was too relaxed.** A roleplay jailbreak with no
 banned phrase went straight through to a model. Vela Guard scores differently

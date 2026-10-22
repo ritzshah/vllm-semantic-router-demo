@@ -109,7 +109,7 @@ types, and the condition types draw on different machinery:
 |---|---|---|
 | `keyword` | Case-insensitive substring match over a named list | Negligible |
 | `embedding` | Vela encoder cosine similarity against candidate phrases | Low, CPU |
-| `complexity` | Same embedding model, against `easy` / `hard` candidate sets | Low, CPU |
+| `complexity` | Same embedding model, against `easy` / `hard` candidate sets — see below | Low, CPU |
 | `domain` | Vela-1.0-Encoder-307M-Domain, mapped onto MMLU-Pro categories | Moderate, CPU |
 | `pii` | Vela-1.0-Encoder-307M-PII | Moderate, CPU |
 | `jailbreak` | Vela-1.0-Encoder-307M-Guard | Moderate, CPU |
@@ -180,6 +180,60 @@ declared signal, that `modelRefs` resolve to `providers.models`, and that
 checks the same things, but one error per startup — this reports them all at
 once, in about a second.
 
+## The complexity signal is a difference, not a score
+
+This one is worth understanding before you touch its threshold, because the
+obvious reading is wrong.
+
+The signal embeds the prompt and scores it against both candidate sets, then
+compares the **difference**:
+
+```
+signal = hard_score - easy_score
+
+signal < -threshold   ->  easy
+signal >  threshold   ->  hard
+otherwise             ->  medium   (neither band fires)
+```
+
+So `threshold` is a *margin*, not a similarity floor. Raising it does not make
+the bands stricter in the way you would expect — it widens the dead zone in the
+middle where neither fires.
+
+The router prints the arithmetic, which makes tuning a measurement rather than
+a guess:
+
+```bash
+oc logs -n models deploy/semantic-router -c semantic-router --tail=200 \
+  | grep "Complexity rule"
+# Complexity rule 'code_complexity': hard_score=0.446, easy_score=0.966,
+#   signal=-0.520, difficulty=medium
+```
+
+Measured on this deployment:
+
+| Prompt | signal | Wanted |
+|---|---:|---|
+| "Write a Python function that … returns the sum of its values." | −0.520 | easy |
+| "Compute the derivative of f(x) = x³·ln(x) …" | −0.208 | neither |
+| "Explain the difference between a Python list and a tuple …" | −0.147 | neither |
+
+The shipped threshold is **0.36**, midway between −0.520 and −0.208, giving
+roughly 0.15 of margin on each side.
+
+Two failure modes either side of that:
+
+- **Too low** (the 0.1 this demo inherited): almost every prompt lands in a
+  band, so `coding_easy_complexity` at priority 140 outranks and absorbs
+  traffic meant for `coding` (130) and `math` (120). A calculus question gets
+  answered by the small model, and the demo looks like it is doing complexity
+  routing when it is really doing *only* complexity routing.
+- **Too high** (0.55 and up): nothing is ever easy or hard, both complexity
+  decisions go dead, and everything falls through to plain intent routing.
+
+Because this is a margin between two embedding scores, it does not survive a
+change of embedding model. Re-measure after any such change.
+
 ## The semantic cache
 
 Caching is configured globally under `global.stores.response_cache` and then
@@ -206,6 +260,30 @@ warning on every decision that uses it) —
 costly than a cache miss, and `user_feedback_escalation` disables the cache
 entirely, because replaying a cached answer to someone who just said the answer
 was wrong is the worst available behaviour.
+
+### Two things that will bite you
+
+**Scope.** The cache is keyed per *user* by default. With no identity on the
+request the router logs `cache_scope_user_missing` and skips the cache
+entirely — silently, with no cache header and no error. Every decision here
+sets `scope: global`. Valid values are `user`, `team`, `tenant` and `global`;
+the non-global ones also want `USER_SCOPE_NAMESPACE_SECRET` when the endpoint
+is remotely reachable.
+
+**Similarity is lexical.** Measured against a cached
+"explain the difference between a Python list and a tuple":
+
+| Request | similarity |
+|---|---:|
+| identical | 1.0000 |
+| "…**set** and a **dict**…" — a different question | 0.9431 |
+| a full reword of the original | 0.8555 |
+
+The wrong question scores higher than the paraphrase, because it shares more
+wording. There is no threshold that admits the paraphrase and rejects the
+distractor, so this deployment picks precision: **0.95**, which caches repeats
+and nothing else. Treat any similarity threshold as a precision/recall dial
+measured on *your* prompts, not a meaning detector.
 
 `backend_type: memory` means the cache is per-pod and dies with the pod. That is
 fine for a demo and deliberately simple; the router also supports Milvus for a

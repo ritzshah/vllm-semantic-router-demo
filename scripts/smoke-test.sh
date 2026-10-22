@@ -163,8 +163,11 @@ ask guard-pii-classifier "$BLOCK" auto \
 CACHE_PROMPT='Explain the difference between a Python list and a tuple, and when to use each.'
 ask cache-exact-run1 "$QWEN" auto "$CACHE_PROMPT"
 ask cache-exact-run2 "$QWEN" auto "$CACHE_PROMPT"
-ask cache-paraphrase "$QWEN" auto \
-  "What's the distinction between a tuple and a list in Python, and when should I pick one over the other?"
+# The near-miss the cache must refuse: two words different from the primed
+# prompt. Asserting the model here, not the cache path — scripts/smoke-test.sh
+# only sees the response body. Check x-vsr-response-path in the console.
+ask cache-precision "$QWEN" auto \
+  'Explain the difference between a Python set and a dict, and when to use each.'
 
 # Both halves of the auto-vs-pinned comparison: the same trivial prompt, once
 # pinned to the 7B model and once left to the router.
