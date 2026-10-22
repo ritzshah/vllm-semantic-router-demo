@@ -130,9 +130,39 @@ oc logs -n models deploy/semantic-router -c semantic-router --previous --tail=10
 | In the log | Cause |
 |---|---|
 | `config file must use the canonical v0.3 hierarchy` | Your config is the older flat layout. See below. |
-| `no such file or directory` under `/app/models` | The init container did not finish. Check it first. |
-| OOMKilled, or the pod is killed while loading | Four ModernBERT models on CPU need headroom. Raise the memory limit from 8 Gi. |
+| `No space left on device (os error 28)` while loading a model | The models PVC is full. v0.3 downloads the Vela family plus its model runtime, ~5 GB. The error names neither the volume nor the file. |
+| `exit code 137` / `OOMKilled` partway through loading | The model runtime forks one float32 process per model — five of them. See below. |
 | A gated-model or 401 error mentioning `mom-embedding-light` | The init container's alias step did not run. Delete the models PVC and redeploy: `./scripts/undeploy.sh --pvcs` then `./scripts/deploy.sh --skip-models`. |
+
+### OOMKilled while the classifiers load
+
+```bash
+oc get pod -n models -l app=semantic-router \
+  -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="semantic-router")].lastState}'
+# {"terminated":{"exitCode":137,"reason":"OOMKilled", ...}}
+```
+
+The v0.3 model runtime does **not** load classifiers in-process. It forks a
+separate float32 Python server per model — `prompt_guard`, `pii_classifier`,
+`domain_classifier`, the primary embedding and `@embedding.mmbert` — each on its
+own unix socket. Five processes need considerably more than the 8 Gi the older
+single-process build was happy with.
+
+The deployment here asks for 8 Gi and is limited to 20 Gi. If you still get
+killed, raise the limit; if your nodes are small, that is the number to check
+before anything else. Watch it climb with:
+
+```bash
+oc adm top pod -n models -l app=semantic-router --containers
+```
+
+Restart count is the giveaway — a router that loads models cleanly and then
+dies, repeatedly, at roughly the same point is being killed, not failing:
+
+```bash
+oc get pod -n models -l app=semantic-router \
+  -o jsonpath='{.items[0].status.containerStatuses[*].restartCount}'
+```
 
 ### `config file must use the canonical v0.3 hierarchy`
 

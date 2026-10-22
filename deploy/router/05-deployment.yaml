@@ -75,13 +75,20 @@ spec:
             port: 50051
           periodSeconds: 10
           timeoutSeconds: 3
+        # v0.3 does not load the classifiers in-process. Its model runtime
+        # forks a separate float32 Python server per model — prompt_guard,
+        # pii_classifier, domain_classifier, the primary embedding and
+        # @embedding.mmbert — each listening on its own unix socket. Five
+        # processes do not fit in the 8Gi that the old single-process build
+        # needed, and the failure mode is a bare exit 137 / OOMKilled partway
+        # through loading the last one.
         resources:
           requests:
-            cpu: 1500m
-            memory: 4Gi
-          limits:
-            cpu: "3"
+            cpu: "2"
             memory: 8Gi
+          limits:
+            cpu: "6"
+            memory: 20Gi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
