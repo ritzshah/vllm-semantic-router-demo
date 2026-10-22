@@ -197,7 +197,29 @@ docs/
   presentation-runbook.md  running order, talk track, failure recovery
   troubleshooting.md       what breaks and what to do about it
   llm-d-integration.md     where llm-d fits alongside this
+  presentation/            the slide deck — see below
+deploy/cluster/            optional: a machineset for a second GPU node
 ```
+
+### The slide deck
+
+[`docs/presentation/`](docs/presentation/) holds a 23-slide talk covering the
+project's five-stage pipeline, recipes, guardrails, the llm-d comparison, and
+this demo.
+
+Slide content lives once, in [`deck.js`](docs/presentation/deck.js).
+[`index.html`](docs/presentation/index.html) renders it as a self-contained
+deck — arrow keys to move, `n` for presenter notes, `f` fullscreen, `p` to
+print to PDF — and `build-pptx.py` emits an editable `.pptx` from the same
+source, so the two cannot drift:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install python-pptx
+.venv/bin/python docs/presentation/build-pptx.py
+```
+
+[`DECK-REVIEW.md`](docs/presentation/DECK-REVIEW.md) records what changed
+relative to the earlier version of this talk and why.
 
 ### Editing the demo
 
