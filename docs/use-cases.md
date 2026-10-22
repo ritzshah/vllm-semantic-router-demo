@@ -205,36 +205,49 @@ the global default.
 
 ### `cache-precision` — the near-miss it must refuse
 
-> Step 1: Explain the difference between a Python list and a tuple, and when to use each.
->
-> Step 2: Explain the difference between a Python **set** and a **dict**, and when to use each.
+> 1. Explain the difference between **append() and extend()** on a Python list…
+> 2. The same question again → **cache hit**
+> 3. Explain the difference between **insert() and remove()** on a Python list… → **must miss**
 
-Two words different, completely different question. It must come from a model,
-not from the cache — and it does.
+Step 2 proves the cache is on. Step 3 changes two words and must reach a model.
 
-This case started life as a paraphrase demo ("same question, different words,
-same cached answer"). Measuring it on a real deployment killed that idea, and
-the measurement is more interesting than the demo would have been:
+Getting this right took measurement, and the numbers are the most useful thing
+in this document.
 
-| Request, against a cached "…list and a tuple…" | similarity |
+| Request, against a cached entry | similarity |
 |---|---:|
-| Identical repeat | **1.0000** |
-| "…**set** and a **dict**…" — a *different* question | **0.9431** |
-| "What's the distinction between a tuple and a list in Python…" — a *true paraphrase* | **0.8555** |
+| identical repeat | **1.0000** |
+| "insert/remove" against a cached "append/extend" | **0.9650** |
+| "set/dict" against a cached "list/tuple" | **0.9431** |
+| a genuine reword of the cached "list/tuple" question | **0.8555** |
 
-**The lexically similar wrong question scores higher than the genuine
-paraphrase.** Embedding similarity tracks phrasing at least as much as meaning.
-No threshold separates those two cases, and at the original 0.92 you get the
-worst of both: the paraphrase misses *and* the wrong-answer hit succeeds. At
-0.85 the router will cheerfully answer a question about sets and dicts with a
-cached explanation of lists and tuples — verified, not hypothetical.
+Three things fall out of that table:
 
-So the threshold is **0.95**: repeats are cached, everything else goes to a
-model. Lower hit rate, no wrong answers.
+1. **The wrong question outscores the true paraphrase.** 0.9650 and 0.9431 are
+   both *different questions*; 0.8555 is a faithful reword. These embeddings
+   track phrasing at least as much as meaning.
+2. **The near-miss score moves with the topic** — 0.9431 for one pair, 0.9650
+   for another. Any threshold you pick from one example will be wrong for the
+   next.
+3. **So there is no safe threshold below exact match** for questions built from
+   a template. At 0.95 this deployment answered a question about `insert` and
+   `remove` with a cached explanation of `append` and `extend` — observed, not
+   hypothetical.
+
+The shipped threshold is **0.99**: repeats are cached, everything else goes to
+a model. Lower hit rate, no wrong answers.
 
 Say this part out loud. An audience that has read a vendor slide about semantic
 caching has been told it understands meaning. Showing the number where it does
 not is worth more than another green tick.
+
+#### Why these cases rotate topics
+
+Both cache cases carry a `rotate` list, and the console advances it after every
+run. Without that they are only honest once: entries live for an hour, so the
+second time you press Run, step 1 is itself a cache hit and "Run 1 — cold" is a
+lie — and the near-miss step stops missing, because the previous run cached it
+too. The chip in the header shows which topic you are on.
 
 ### `cost-auto-vs-pinned` — the before and after
 

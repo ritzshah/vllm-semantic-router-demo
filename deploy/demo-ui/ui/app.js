@@ -24,6 +24,8 @@ const state = {
   // per-case: prompt text the presenter edited, so a live edit survives the
   // re-renders that happen between steps of a multi-step case
   edits: Object.create(null),
+  // per-case: index into uc.rotate, advanced after each completed run
+  rotation: Object.create(null),
   tally: { qwen: 0, phi: 0, cached: 0, blocked: 0 },
   banner: null,
 };
@@ -240,20 +242,59 @@ function verdictFor(result, expect) {
   return null;
 }
 
-/** Current prompt text for a step: whatever the presenter last typed, else the shipped prompt. */
+/**
+ * Topic rotation.
+ *
+ * The cache cases are only honest on a cold cache: once a prompt has been
+ * asked, every later run of the same case hits the cache at step 1 and the
+ * "cold" label becomes a lie — and the near-miss step stops missing, because
+ * it too is now cached from the previous run. Entries live for an hour.
+ *
+ * So those cases carry a `rotate` list of substitutions, and each completed
+ * run advances to the next one. The audience sees an ordinary question; the
+ * presenter gets a genuine cold cache every time.
+ */
+function variantFor(uc) {
+  if (!uc.rotate || !uc.rotate.length) return null;
+  return uc.rotate[(state.rotation[uc.id] || 0) % uc.rotate.length];
+}
+
+function applyVars(text, vars) {
+  if (!vars) return text;
+  return text.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m));
+}
+
+function advanceRotation(uc) {
+  if (!uc.rotate || !uc.rotate.length) return;
+  state.rotation[uc.id] = ((state.rotation[uc.id] || 0) + 1) % uc.rotate.length;
+}
+
+/** The shipped prompt for a step, with the current rotation applied. */
+function defaultPrompt(uc, i) {
+  const msgs = uc.steps[i].body.messages;
+  return applyVars(msgs[msgs.length - 1].content, variantFor(uc));
+}
+
+/** Current prompt text: whatever the presenter last typed, else the shipped prompt. */
 function promptFor(uc, i) {
   const edited = state.edits[uc.id] && state.edits[uc.id][i];
   if (typeof edited === 'string') return edited;
-  const msgs = uc.steps[i].body.messages;
-  return msgs[msgs.length - 1].content;
+  return defaultPrompt(uc, i);
 }
 
-/** Snapshot every textarea into state, so edits survive the re-render between steps. */
+/**
+ * Snapshot every textarea into state, so edits survive the re-render between
+ * steps. Only text that actually differs from the shipped prompt counts as an
+ * edit — otherwise capturing would pin the current rotation and the case would
+ * stop rotating after its first run.
+ */
 function captureEdits(uc) {
   const edits = state.edits[uc.id] || (state.edits[uc.id] = {});
   uc.steps.forEach((_, i) => {
     const ta = document.querySelector(`#prompt-${i}`);
-    if (ta) edits[i] = ta.value;
+    if (!ta) return;
+    if (ta.value !== defaultPrompt(uc, i)) edits[i] = ta.value;
+    else delete edits[i];
   });
 }
 
@@ -294,6 +335,7 @@ async function runCase() {
     render();
   }
 
+  advanceRotation(uc);
   state.running = false;
   render();
 }
@@ -486,6 +528,7 @@ function render() {
       <span class="chip decision">decision: <b>${esc(uc.decision)}</b></span>
       ${expectChip(uc.expect)}
       <span class="chip">${uc.steps.length} request${uc.steps.length === 1 ? '' : 's'}</span>
+      ${uc.rotate ? `<span class="chip" title="This case uses a fresh topic on every run, so the cache is genuinely cold each time.">topic <b>${((state.rotation[uc.id] || 0) % uc.rotate.length) + 1}</b> of ${uc.rotate.length}</span>` : ''}
     </div>
 
     ${steps}
@@ -543,6 +586,7 @@ function select(i) {
 function clearAll() {
   state.results = Object.create(null);
   state.edits = Object.create(null);
+  state.rotation = Object.create(null);
   state.tally = { qwen: 0, phi: 0, cached: 0, blocked: 0 };
   renderTally();
   render();

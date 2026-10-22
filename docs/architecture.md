@@ -273,17 +273,22 @@ is remotely reachable.
 **Similarity is lexical.** Measured against a cached
 "explain the difference between a Python list and a tuple":
 
-| Request | similarity |
+| Request, against a cached entry | similarity |
 |---|---:|
-| identical | 1.0000 |
-| "…**set** and a **dict**…" — a different question | 0.9431 |
-| a full reword of the original | 0.8555 |
+| identical repeat | 1.0000 |
+| "insert/remove" vs cached "append/extend" — *different question* | 0.9650 |
+| "set/dict" vs cached "list/tuple" — *different question* | 0.9431 |
+| a faithful reword of the cached question | 0.8555 |
 
-The wrong question scores higher than the paraphrase, because it shares more
-wording. There is no threshold that admits the paraphrase and rejects the
-distractor, so this deployment picks precision: **0.95**, which caches repeats
-and nothing else. Treat any similarity threshold as a precision/recall dial
-measured on *your* prompts, not a meaning detector.
+Two different questions score 0.9650 and 0.9431; a genuine paraphrase scores
+0.8555. The wrong question outscores the paraphrase, and the near-miss score
+moves with the topic — so a threshold tuned on one example is wrong for the
+next. At 0.95 this deployment answered an "insert/remove" question with a
+cached "append/extend" explanation.
+
+The shipped threshold is therefore **0.99**: effectively exact-repeat only.
+Treat any similarity threshold as a precision/recall dial measured on *your*
+prompts, not a meaning detector.
 
 `backend_type: memory` means the cache is per-pod and dies with the pod. That is
 fine for a demo and deliberately simple; the router also supports Milvus for a

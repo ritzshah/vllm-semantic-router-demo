@@ -160,6 +160,9 @@ ask guard-pii-classifier "$BLOCK" auto \
 
 # ------------------------------------------------------------- cache & cost --
 
+# Topic 1 of the console's rotation for cache-exact. The console rotates so
+# that step 1 is always a cold miss; this script runs once, so a fixed topic
+# is fine, but it will hit the cache if you run it twice inside the TTL.
 CACHE_PROMPT='Explain the difference between a Python list and a tuple, and when to use each.'
 ask cache-exact-run1 "$QWEN" auto "$CACHE_PROMPT"
 ask cache-exact-run2 "$QWEN" auto "$CACHE_PROMPT"

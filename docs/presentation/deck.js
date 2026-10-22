@@ -215,7 +215,7 @@ const DECK = {
       "title": "Plugins: what happens on the way through",
       "intro": "Configurable per decision, so a route can tighten or disable any of them.",
       "columns": [
-        { "heading": "Semantic cache", "body": "Embedding similarity, not a hash — but measure before you trust it. Here an identical repeat scores 1.0000, a two-word-different question 0.9431, and a true paraphrase only 0.8555. The wrong question outscores the paraphrase, so the threshold is a precision/recall dial, not a meaning detector." },
+        { "heading": "Semantic cache", "body": "Embedding similarity, not a hash — but measure before you trust it. Two *different* questions scored 0.9650 and 0.9431 against a cached entry, while a faithful reword scored only 0.8555. The wrong question outscores the paraphrase, and the near-miss score moves with the topic, so this deployment runs at 0.99 — repeats only." },
         { "heading": "Prompt guard", "body": "Jailbreak detection combining deterministic phrase rules with a classifier, so an unseen phrasing is still caught." },
         { "heading": "PII handling", "body": "Token-level entity detection. Whether that blocks, redacts, reroutes or just records is the decision's call, not the detector's." }
       ],
@@ -307,7 +307,7 @@ const DECK = {
         ["Complexity scaling", "The same topic, graded by difficulty, routed in opposite directions.", "2"],
         ["Policy & priority", "Urgent security work overrides the cost optimiser. User pushback escalates and disables the cache.", "2"],
         ["Guardrails", "Keyword rules and ML classifiers, blocking in tens of milliseconds with no GPU involved.", "5"],
-        ["Cache & cost", "A repeat returns in 750 ms instead of 6.9 s. A near-miss is correctly refused. Pinning a model opts out of all of it.", "3"]
+        ["Cache & cost", "A repeat returns in 0.7 s instead of 6.9 s. A two-word-different question is correctly refused. Pinning a model opts out of all of it.", "3"]
       ],
       "note": "Do not read the table. Switch to the console and run them. Lead with the two complexity cases back to back, then the two jailbreak cases back to back."
     },

@@ -468,30 +468,41 @@ const USE_CASES = [
     group: 'Cache & cost',
     title: 'Semantic cache — identical prompt',
     subtitle: 'Three runs. Watch run two and three.',
-    decision: 'coding + semantic-cache plugin (threshold 0.92)',
+    decision: 'coding + response_cache plugin (threshold 0.99)',
     expect: { model: MODELS.QWEN },
+    // Each Run advances to the next topic, so step 1 is always a genuine cold
+    // miss. Without this the case is only honest the first time you press Run:
+    // the cache lives for an hour, so on every later run step 1 is itself a
+    // hit and "Run 1 — cold" is a lie.
+    rotate: [
+      { TOPIC: 'a Python list and a tuple' },
+      { TOPIC: 'a Python set and a frozenset' },
+      { TOPIC: 'threading and multiprocessing in Python' },
+      { TOPIC: 'a shallow copy and a deep copy in Python' },
+      { TOPIC: 'is and == in Python' },
+      { TOPIC: 'a decorator and a context manager in Python' },
+    ],
     why:
-      'The first request is embedded with the Vela encoder, routed, answered by the model, and ' +
-      'the answer is stored against that embedding. Later requests whose embedding is ' +
-      'within the similarity threshold are answered from the cache without touching a ' +
-      'GPU. The cache is in-memory here with a 3600s TTL and FIFO eviction; it can be ' +
-      'backed by Milvus for a shared, persistent cache across router replicas.',
+      'The first request is embedded with the Vela encoder, routed, answered by ' +
+      'the model, and the answer stored against that embedding. Later requests ' +
+      'whose embedding is within the similarity threshold are answered from the ' +
+      'cache without touching a GPU. Measured here: roughly 6.9 s cold against ' +
+      '0.75 s cached. The cache is in-memory with a 3600 s TTL and FIFO ' +
+      'eviction, and can be backed by Milvus or Redis for a shared, persistent ' +
+      'cache across replicas. Note the scope: v0.3 keys the cache per user by ' +
+      'default and silently skips it when the request carries no identity — ' +
+      'every decision here sets scope: global.',
     talk:
-      'First run pays full price. Second and third are the same question, so they come ' +
-      'back from the cache — no GPU involved. In a real workload with repetitive ' +
-      'questions, this is where the bill actually goes down.',
+      'First run pays full price. Second and third are the same question, so ' +
+      'they come back from the cache with no GPU involved. Each time you press ' +
+      'Run the demo moves to a fresh topic, so run one is always a real cold ' +
+      'miss rather than a leftover from the last time I showed you this.',
     steps: [
       {
         label: 'Run 1 — cold',
         body: {
           model: 'auto',
-          messages: [
-            {
-              role: 'user',
-              content:
-                'Explain the difference between a Python list and a tuple, and when to use each.',
-            },
-          ],
+          messages: [{ role: 'user', content: 'Explain the difference between {{TOPIC}}, and when to use each.' }],
           temperature: 0,
           max_tokens: 300,
         },
@@ -501,13 +512,7 @@ const USE_CASES = [
         expect: { cached: true, model: MODELS.QWEN },
         body: {
           model: 'auto',
-          messages: [
-            {
-              role: 'user',
-              content:
-                'Explain the difference between a Python list and a tuple, and when to use each.',
-            },
-          ],
+          messages: [{ role: 'user', content: 'Explain the difference between {{TOPIC}}, and when to use each.' }],
           temperature: 0,
           max_tokens: 300,
         },
@@ -517,56 +522,64 @@ const USE_CASES = [
         expect: { cached: true, model: MODELS.QWEN },
         body: {
           model: 'auto',
-          messages: [
-            {
-              role: 'user',
-              content:
-                'Explain the difference between a Python list and a tuple, and when to use each.',
-            },
-          ],
+          messages: [{ role: 'user', content: 'Explain the difference between {{TOPIC}}, and when to use each.' }],
           temperature: 0,
           max_tokens: 300,
         },
       },
     ],
   },
+
   {
     id: 'cache-precision',
     group: 'Cache & cost',
     title: 'Semantic cache — the near-miss it refuses',
-    subtitle: 'Two words different. Must not be answered from cache.',
-    decision: 'coding + response_cache plugin (threshold 0.95)',
+    subtitle: 'Prime it, hit it, then change two words.',
+    decision: 'coding + response_cache plugin (threshold 0.99)',
     expect: { model: MODELS.QWEN },
+    rotate: [
+      { A: 'append() and extend() on a Python list', B: 'insert() and remove() on a Python list' },
+      { A: 'a Python list and a tuple', B: 'a Python set and a dict' },
+      { A: 'map() and filter() in Python', B: 'zip() and enumerate() in Python' },
+      { A: 'a staticmethod and a classmethod in Python', B: 'a property and a descriptor in Python' },
+      { A: 'try/except and try/finally in Python', B: 'assert and raise in Python' },
+    ],
     why:
-      'A cache that is too eager is worse than no cache, because it returns a ' +
-      'confident answer to a question nobody asked. Step two differs from step ' +
-      'one by two words — set and dict instead of list and tuple — and it must ' +
-      'come back from a model, not from the cache. Measured on this deployment: ' +
-      'an identical repeat scores 1.0000, this near-miss scores 0.9431, and a ' +
-      'full reword of the original question scores only 0.8555. Note the order: ' +
-      'the lexically similar *different* question scores higher than the ' +
-      'genuine paraphrase. Embedding similarity tracks wording at least as much ' +
-      'as meaning, so the threshold is set at 0.95 to buy precision — repeats ' +
-      'are cached, anything less is not.',
+      'A cache that is too eager is worse than no cache: it returns a confident ' +
+      'answer to a question nobody asked. Step 2 proves the cache is on. Step 3 ' +
+      'changes two words and must come back from a model. Getting this right ' +
+      'took measurement, and the numbers are uncomfortable. Against a cached ' +
+      '"append/extend" entry, the structurally identical but different ' +
+      '"insert/remove" question scores 0.9650 — and against a cached ' +
+      '"list/tuple" entry, a genuine reword of that same question scores only ' +
+      '0.8555. The wrong question outscores the true paraphrase, and the ' +
+      'near-miss score moves with the topic, so no threshold below exact match ' +
+      'is safe for templated questions. At 0.95 this demo served an ' +
+      'append/extend answer to an insert/remove question. The threshold is now ' +
+      '0.99 — repeats only.',
     talk:
-      'Same shape, two words changed, completely different question. It has to ' +
-      'miss — and it does. Here is the uncomfortable part: a full reword of the ' +
-      'original scores lower than this does. The cache is matching phrasing as ' +
-      'much as meaning, so I set the threshold for precision and accept a lower ' +
-      'hit rate. A cache that confidently answers the wrong question is the one ' +
-      'failure you cannot explain to a customer.',
+      'Step two shows the cache working. Step three changes two words and has to ' +
+      'miss — and this is the part worth your attention. At a 0.95 threshold it ' +
+      'did not miss: it confidently answered a question about insert and remove ' +
+      'with a cached explanation of append and extend. These embeddings track ' +
+      'phrasing as much as meaning, so I set this for precision and accept a ' +
+      'lower hit rate. Measure it on your own prompts before you trust a number.',
     steps: [
       {
         label: 'Prime the cache',
         body: {
           model: 'auto',
-          messages: [
-            {
-              role: 'user',
-              content:
-                'Explain the difference between a Python list and a tuple, and when to use each.',
-            },
-          ],
+          messages: [{ role: 'user', content: 'Explain the difference between {{A}}, and when to use each.' }],
+          temperature: 0,
+          max_tokens: 300,
+        },
+      },
+      {
+        label: 'Identical — should hit',
+        expect: { cached: true, model: MODELS.QWEN },
+        body: {
+          model: 'auto',
+          messages: [{ role: 'user', content: 'Explain the difference between {{A}}, and when to use each.' }],
           temperature: 0,
           max_tokens: 300,
         },
@@ -575,13 +588,7 @@ const USE_CASES = [
         label: 'Two words different — must miss',
         body: {
           model: 'auto',
-          messages: [
-            {
-              role: 'user',
-              content:
-                'Explain the difference between a Python set and a dict, and when to use each.',
-            },
-          ],
+          messages: [{ role: 'user', content: 'Explain the difference between {{B}}, and when to use each.' }],
           temperature: 0,
           max_tokens: 300,
         },

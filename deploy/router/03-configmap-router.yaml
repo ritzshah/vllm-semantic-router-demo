@@ -351,7 +351,7 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.95
+            similarity_threshold: 0.99
             scope: global
       - name: user_feedback_escalation
         description: Escalate correction requests to stronger model with anti-hallucination guidance
@@ -390,7 +390,7 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.95
+            similarity_threshold: 0.99
             scope: global
       - name: coding_easy_complexity
         description: 'Complexity-aware scaling: easy coding tasks -> phi'
@@ -407,7 +407,7 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.95
+            similarity_threshold: 0.99
             scope: global
       - name: block_jailbreak_keywords
         description: Deterministic jailbreak guardrail using keyword patterns
@@ -458,7 +458,7 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.95
+            similarity_threshold: 0.99
             scope: global
       - name: math
         description: 'Signal-decision route: math keyword or domain -> qwen'
@@ -479,7 +479,7 @@ data:
         - type: response_cache
           configuration:
             enabled: true
-            similarity_threshold: 0.95
+            similarity_threshold: 0.99
             scope: global
       - name: general
         description: 'Signal-decision route: general chat keyword -> phi'
@@ -556,7 +556,7 @@ data:
         response_cache:
           enabled: true
           backend_type: memory
-          similarity_threshold: 0.85
+          similarity_threshold: 0.99
           max_entries: 1000
           ttl_seconds: 3600
           eviction_policy: fifo
