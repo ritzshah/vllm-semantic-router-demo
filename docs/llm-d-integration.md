@@ -56,7 +56,7 @@ Remarkably little, which is the point of the `ORIGINAL_DST` design.
    change to the script.
 
 4. **Envoy needs no changes at all.** It already forwards to whatever address
-   arrives in `x-vsr-destination-endpoint`.
+   arrives in `x-vsr-upstream-host`.
 
 Because the router's decision logic is untouched, every use case in
 [use-cases.md](use-cases.md) and the whole demo console keep working unmodified

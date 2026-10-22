@@ -5,7 +5,7 @@
 #          -> cors filter          (short-circuits OPTIONS preflight)
 #          -> ext_proc filter      (gRPC to the router on 127.0.0.1:50051)
 #               router classifies the prompt, picks a model, and sets the
-#               x-vsr-destination-endpoint request header to "IP:port"
+#               x-vsr-upstream-host request header to "IP:port"
 #          -> router filter        -> vllm_dynamic_cluster (ORIGINAL_DST)
 #               Envoy dials the address in that header directly
 #
@@ -46,7 +46,7 @@ data:
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
                   log_format:
-                    text_format: "status=%RESPONSE_CODE% total_ms=%DURATION% upstream_ms=%RESP(x-envoy-upstream-service-time)% cluster=%UPSTREAM_CLUSTER% vsr=%REQ(x-vsr-destination-endpoint)% method=%REQ(:METHOD)% path=%REQ(:PATH)%\n"
+                    text_format: "status=%RESPONSE_CODE% total_ms=%DURATION% upstream_ms=%RESP(x-envoy-upstream-service-time)% cluster=%UPSTREAM_CLUSTER% vsr=%REQ(x-vsr-upstream-host)% model=%RESP(x-vsr-selected-model)% decision=%RESP(x-vsr-selected-decision)% cache=%RESP(x-vsr-cache-hit)% method=%REQ(:METHOD)% path=%REQ(:PATH)%\n"
               route_config:
                 name: local_route
                 virtual_hosts:
@@ -59,8 +59,8 @@ data:
                       - safe_regex:
                           regex: ".*"
                       allow_methods: "GET, POST, OPTIONS"
-                      allow_headers: "content-type,authorization,accept,x-request-id,x-vsr-destination-endpoint"
-                      expose_headers: "x-vsr-selected-model,x-vsr-selected-category,x-vsr-selected-reasoning,x-vsr-selected-decision,x-vsr-cache-hit,x-vsr-injected-system-prompt,x-vsr-destination-endpoint,x-envoy-upstream-service-time"
+                      allow_headers: "content-type,authorization,accept,x-request-id"
+                      expose_headers: "x-vsr-selected-model,x-vsr-selected-category,x-vsr-selected-decision,x-vsr-selected-reasoning,x-vsr-selected-algorithm,x-vsr-selected-confidence,x-vsr-cache-hit,x-vsr-routing-latency-ms,x-vsr-upstream-host,x-envoy-upstream-service-time"
                       max_age: "86400"
                   routes:
                   # Classification API, health and model list are served by the
@@ -188,7 +188,14 @@ data:
         lb_policy: CLUSTER_PROVIDED
         original_dst_lb_config:
           use_http_header: true
-          http_header_name: "x-vsr-destination-endpoint"
+          # v0.3 renamed this header. It was x-vsr-destination-endpoint, which
+          # no longer appears in the router binary at all — so Envoy saw no
+          # address, ORIGINAL_DST had nothing to dial, and every request that
+          # needed a model came back "503 no healthy upstream" while guardrail
+          # blocks (answered by the router itself) kept working fine.
+          # The access log below prints this header: `vsr=-` means the router
+          # is not setting it and the name here is wrong again.
+          http_header_name: "x-vsr-upstream-host"
 
     admin:
       address:

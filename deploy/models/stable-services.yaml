@@ -1,7 +1,7 @@
 # Stable ClusterIP Services in front of the KServe predictors.
 #
 # Why these exist: Envoy's ORIGINAL_DST cluster in the router resolves the
-# x-vsr-destination-endpoint header as a literal IP:port — it performs no DNS
+# x-vsr-upstream-host header as a literal IP:port — it performs no DNS
 # lookup. The router config therefore needs an IP address per backend, and these
 # Services give us an IP that survives InferenceService redeploys (the predictor
 # Services that KServe generates are recreated on every revision).

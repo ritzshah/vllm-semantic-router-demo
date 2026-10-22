@@ -31,7 +31,7 @@ processor* reached over gRPC on localhost.
                                    │      (a) an immediate response  → guardrail block
                                    │                                   or cache hit
                                    │      (b) a mutated request      → sets header
-                                   │          x-vsr-destination-endpoint: <IP>:8080
+                                   │          x-vsr-upstream-host: <IP>:8080
                                    │
                                    │ 3. router filter
                                    ▼
