@@ -62,9 +62,9 @@ spec:
           containerPort: 9190
         - name: classify-api
           containerPort: 8080
-        # Loading four ModernBERT models on CPU takes a couple of minutes on a
-        # cold start. The startup probe gives it up to 10 minutes before the
-        # kubelet decides the container is broken.
+        # The model runtime starts one CPU process per Vela model and, on a
+        # cold volume, downloads them first. The startup probe allows up to 10
+        # minutes before the kubelet decides the container is broken.
         startupProbe:
           tcpSocket:
             port: 50051

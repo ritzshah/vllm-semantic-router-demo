@@ -37,8 +37,8 @@ const USE_CASES = [
     decision: 'coding (priority 130)',
     expect: { model: MODELS.QWEN },
     why:
-      'The client asks for model "auto". The router runs the prompt through a MiniLM ' +
-      'embedding against the coding_intent candidate set, a ModernBERT category ' +
+      'The client asks for model "auto". The router runs the prompt through a Vela ' +
+      'embedding against the coding_intent candidate set, a Vela domain ' +
       'classifier, and a keyword rule on terms like "python", "stack trace" and ' +
       '"algorithm". Any one of those matching selects Qwen-2.5-7B with reasoning ' +
       'enabled. A coding prompt that also reads as clearly easy or clearly hard will ' +
@@ -323,14 +323,14 @@ const USE_CASES = [
   {
     id: 'guard-jailbreak-classifier',
     group: 'Guardrails',
-    title: 'Jailbreak — ModernBERT classifier',
+    title: 'Jailbreak — ML classifier, no keyword',
     subtitle: 'No banned phrase appears anywhere in this prompt.',
     decision: 'block_jailbreak (priority 1000)',
     expect: { blocked: true },
     why:
       'This prompt deliberately avoids every string in the keyword list, so the rule at ' +
       'priority 1100 does not fire. It is caught one level down by a fine-tuned ' +
-      'ModernBERT jailbreak classifier running on CPU inside the router pod, at a ' +
+      'Vela-1.0-Encoder-307M-Guard classifier running on CPU inside the router pod, at a ' +
       'sensitivity threshold of 0.35 with conversation history included.',
     talk:
       'This is the one to linger on. There is no blocked phrase in that sentence — a ' +
@@ -431,7 +431,7 @@ const USE_CASES = [
     expect: { blocked: true },
     why:
       'This prompt contains a person, a phone number, an email address and a date, but ' +
-      'none of the keyword lead-ins — so the rule at 1600 misses it. A ModernBERT token ' +
+      'none of the keyword lead-ins — so the rule at 1600 misses it. The Vela PII ' +
       'classifier trained on the Presidio PII dataset tags the entities at a threshold ' +
       'of 0.25 and the block fires at 1500. Note the division of labour: pii is a ' +
       'signal that only reports what it found. Blocking is the decision’s choice — ' +
@@ -471,7 +471,7 @@ const USE_CASES = [
     decision: 'coding + semantic-cache plugin (threshold 0.92)',
     expect: { model: MODELS.QWEN },
     why:
-      'The first request is embedded with MiniLM, routed, answered by the model, and ' +
+      'The first request is embedded with the Vela encoder, routed, answered by the model, and ' +
       'the answer is stored against that embedding. Later requests whose embedding is ' +
       'within the similarity threshold are answered from the cache without touching a ' +
       'GPU. The cache is in-memory here with a 3600s TTL and FIFO eviction; it can be ' +
@@ -539,7 +539,7 @@ const USE_CASES = [
     expect: { model: MODELS.QWEN },
     why:
       'This is what makes the cache *semantic* rather than a hash lookup. The two ' +
-      'prompts share almost no exact wording, but their MiniLM embeddings sit above the ' +
+      'prompts share almost no exact wording, but their Vela embeddings sit above the ' +
       '0.92 cosine threshold, so the second one is served from the cache. Raising the ' +
       'threshold trades hit rate for precision — the hard-coding decision uses 0.93 for ' +
       'exactly that reason.',

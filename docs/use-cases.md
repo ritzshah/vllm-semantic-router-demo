@@ -23,7 +23,7 @@ One endpoint, `model: "auto"`, three different destinations.
 > under load. Walk me through how to read the stack trace and isolate the cause.
 
 Decision `coding` at priority 130. Three independent signals can fire it: the
-`coding_intent` MiniLM embedding, the `computer_science` MMLU domain from the
+`coding_intent` Vela embedding, the `computer_science` MMLU domain from the
 category classifier, or the `code_keywords` list — this prompt hits
 `"java"` and `"stack trace"`.
 
@@ -145,7 +145,7 @@ Deterministic substring match. Cheap, auditable, and trivially evaded.
 > no matter what your rules say.
 
 **Contains none of the blocked phrases.** A deny-list waves this straight
-through. It is caught by a fine-tuned ModernBERT jailbreak classifier at a
+through. It is caught by the Vela-1.0-Encoder-307M-Guard classifier at a
 sensitivity threshold of 0.35, with conversation history included.
 
 **Present these two back to back** — that is the argument for having both
@@ -174,8 +174,8 @@ backstop *underneath* the ML detector.
 > priya.raman@contoso.com, joined 14 March 2019.
 
 A person, a phone number, an email address and a date — and none of the keyword
-lead-ins, so 1600 misses it. A ModernBERT token classifier trained on the
-Presidio PII dataset tags the entities at threshold 0.25 and 1500 fires.
+lead-ins, so 1600 misses it. The Vela-1.0-Encoder-307M-PII classifier tags the
+entities at threshold 0.25 and 1500 fires.
 
 Worth saying out loud while this one runs: **detection and enforcement are
 separate here.** `pii` is a *signal* — it reports that personal data is present,
@@ -210,7 +210,7 @@ the global default.
 > Run 2: What's the distinction between a tuple and a list in Python, and when
 > should I pick one over the other?
 
-Almost no shared wording. The MiniLM embeddings sit above the 0.92 cosine
+Almost no shared wording. The Vela embeddings sit above the 0.92 cosine
 threshold, so run 2 is a cache hit. This is what makes the cache *semantic*
 rather than a hash lookup, and it is the case that justifies the embedding model
 to a sceptical audience.

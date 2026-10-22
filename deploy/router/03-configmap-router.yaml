@@ -32,7 +32,7 @@
 #   1500 block_pii_content           guardrail  (presidio token classifier)
 #   1200 block_unsafe_content        guardrail  (deterministic)
 #   1100 block_jailbreak_keywords    guardrail  (deterministic)
-#   1000 block_jailbreak             guardrail  (ModernBERT classifier)
+#   1000 block_jailbreak             guardrail  (Vela Guard classifier)
 #    300 critical_security_code      policy override -> qwen + reasoning
 #    220 user_feedback_escalation    correction mode -> qwen + reasoning
 #    145 coding_hard_complexity      upshift   -> qwen + reasoning
@@ -139,7 +139,7 @@ data:
           description: Long-context requests
         complexity:
         - name: code_complexity
-          threshold: 0.1
+          threshold: 0.7
           description: Coding difficulty estimate
           hard:
             candidates:
@@ -153,13 +153,14 @@ data:
             - iterate list and sum values
         pii:
         - name: pii_detected
-          threshold: 0.25
-          pii_types_allowed: []
+          threshold: 0.5
+          pii_types_allowed:
+          - DATE_TIME
           description: Detect requests containing sensitive PII content
         jailbreak:
         - name: jailbreak_standard
           method: classifier
-          threshold: 0.35
+          threshold: 0.2
           include_history: true
           description: High-sensitivity jailbreak detection for demo and policy enforcement
         keywords:
@@ -527,7 +528,7 @@ data:
           prompt_guard:
             enabled: true
             model_id: models/Vela-1.0-Encoder-307M-Guard
-            threshold: 0.7
+            threshold: 0.5
             use_cpu: true
             model_ref: prompt_guard
           classifier:
@@ -538,7 +539,7 @@ data:
               model_ref: domain_classifier
             pii:
               model_id: models/Vela-1.0-Encoder-307M-PII
-              threshold: 0.25
+              threshold: 0.5
               use_cpu: true
               model_ref: pii_classifier
       router: {}

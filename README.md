@@ -14,7 +14,7 @@ The router reads the prompt and decides what should happen to it:
                                  └──────────────┬───────────────┘     no GPU used
                                                 │
                                  ┌──────────────┴───────────────┐
-                                 │  Semantic cache (MiniLM)     │ ──► cached answer,
+                                 │  Semantic cache (Vela)       │ ──► cached answer,
                                  └──────────────┬───────────────┘     no GPU used
                                                 │
                                  ┌──────────────┴───────────────┐
@@ -39,7 +39,7 @@ depending on what was actually asked.
 |---|---|
 | **2 model backends** | Qwen-2.5-7B-Instruct and Phi-3-mini-128k, served by vLLM on KServe |
 | **1 gateway** | vLLM Semantic Router + Envoy, exposing an OpenAI-compatible API |
-| **5 classifiers** | ModernBERT for category, PII (Presidio token model) and jailbreak, MiniLM for embeddings and cache |
+| **4 CPU models** | The Vela-1.0-Encoder-307M family — Domain, PII and Guard classifiers plus the embedding model used for routing and the cache |
 | **15 use cases** | Intent routing, complexity scaling, policy overrides, guardrails, caching, cost |
 | **1 demo console** | Click a case, watch which model answered, with a pass/fail badge against the expected route |
 

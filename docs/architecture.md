@@ -108,11 +108,11 @@ types, and the condition types draw on different machinery:
 | Condition type | Backed by | Cost |
 |---|---|---|
 | `keyword` | Case-insensitive substring match over a named list | Negligible |
-| `embedding` | MiniLM-L12-v2 cosine similarity against candidate phrases | Low, CPU |
+| `embedding` | Vela encoder cosine similarity against candidate phrases | Low, CPU |
 | `complexity` | Same embedding model, against `easy` / `hard` candidate sets | Low, CPU |
-| `domain` | ModernBERT category classifier mapped onto MMLU categories | Moderate, CPU |
-| `pii` | ModernBERT token classifier trained on Presidio | Moderate, CPU |
-| `jailbreak` | ModernBERT sequence classifier | Moderate, CPU |
+| `domain` | Vela-1.0-Encoder-307M-Domain, mapped onto MMLU-Pro categories | Moderate, CPU |
+| `pii` | Vela-1.0-Encoder-307M-PII | Moderate, CPU |
+| `jailbreak` | Vela-1.0-Encoder-307M-Guard | Moderate, CPU |
 
 All of it runs on CPU inside the router pod — `use_cpu: true` throughout — which
 is why the router asks for 1.5–3 cores and 4–8 GB rather than a GPU.
@@ -125,7 +125,7 @@ The full priority ladder as configured:
 | 1500 | `block_pii_content` | Block — Presidio token classifier |
 | 1200 | `block_unsafe_content` | Block — harmful-content keywords |
 | 1100 | `block_jailbreak_keywords` | Block — known jailbreak phrases |
-| 1000 | `block_jailbreak` | Block — ModernBERT jailbreak classifier |
+| 1000 | `block_jailbreak` | Block — Vela Guard classifier |
 | 300 | `critical_security_code` | Qwen + reasoning — urgent AND security AND code |
 | 220 | `user_feedback_escalation` | Qwen + reasoning, cache off, system prompt replaced |
 | 145 | `coding_hard_complexity` | Qwen + reasoning |
@@ -197,7 +197,7 @@ global:
       eviction_policy: "fifo"
 ```
 
-A request is embedded with MiniLM; if an existing entry is within the cosine
+A request is embedded with the Vela encoder; if an existing entry is within the cosine
 threshold, its answer is returned without contacting a model. Individual
 decisions override the threshold through the `response_cache` plugin (named
 `semantic-cache` before v0.3; the old alias still works but logs a deprecation

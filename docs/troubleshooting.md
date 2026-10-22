@@ -87,23 +87,54 @@ selector is worth it.
 Not a breakage. Classification is probabilistic, and the thresholds in the
 config were tuned on one cluster with one pair of models.
 
-First, find out what is actually firing:
+First, find out what actually fired. The Envoy access log gives you the
+decision and the model on one line, which is faster than reading router logs:
 
 ```bash
-oc logs -n models deploy/semantic-router -c semantic-router --since=5m \
-  | grep -Ei 'decision|signal|category|similarity'
+oc logs -n models deploy/semantic-router -c envoy-proxy --tail=20 | grep chat
+# status=200 ... cluster=qwen_cluster ... decision=coding_hard_complexity
 ```
 
-Then adjust in [`03-configmap-router.yaml`](../deploy/router/03-configmap-router.yaml):
+### Three that actually bit us
+
+These are not hypothetical — every one came out of running
+`./scripts/smoke-test.sh` against a fresh deployment, and the shipped config
+carries the corrected values.
+
+**A weekday counted as PII.** "Draft a message welcoming a new teammate who
+starts on **Monday**" was blocked. Replacing "Monday" with "next week" passed.
+The Vela PII classifier tags a bare day name as a date entity, and
+`pii_detected` at 0.25 blocked on it. Fixed by raising the threshold to 0.5 and
+setting `pii_types_allowed: [DATE_TIME]`. A real contact record still blocks —
+it has a person, a phone number and an email to score on.
+
+**The complexity bands swallowed everything.** With
+`signals.complexity.code_complexity.threshold: 0.1`, nearly every prompt
+matched the easy or hard band, so `coding_easy_complexity` (priority 140)
+outranked and absorbed prompts meant for `math` (120) and `coding` (130) — a
+calculus question was being answered by the small model. Raised to 0.7, which
+leaves the bands firing only on prompts genuinely close to the candidate
+phrases.
+
+**The jailbreak classifier was too relaxed.** A roleplay jailbreak with no
+banned phrase went straight through to a model. Vela Guard scores differently
+from the ModernBERT model these numbers were tuned against. Lowered
+`jailbreak_standard` to 0.2 and the `prompt_guard` module to 0.5.
+
+The general lesson: **thresholds do not transfer across model families.** If
+you change the classifier models, re-run the smoke test before trusting any
+number in this config.
+
+### Where to look
 
 | Symptom | Where to look |
 |---|---|
-| Everything lands on one model | `signals.complexity.code_complexity.threshold` — at 0.1 this fires readily; raise it to make the complexity decisions more selective |
-| A prompt should route to Qwen but does not | Add a term to `code_keywords` / `math_keywords`, or add a phrase to the relevant `signals.embeddings.candidates` list |
+| Everything lands on one model | `signals.complexity.code_complexity.threshold` — low values match nearly everything, and priority 140/145 outranks plain intent routing |
+| A prompt should route to Qwen but does not | Add a term to `code_keywords` / `math_keywords`, or a phrase to the relevant `signals.embeddings.candidates` list |
 | Embedding signals never fire | Lower the signal's `threshold` from 0.68 |
-| The category classifier dominates | Raise `classifier.category_model.threshold` from 0.10 |
-| A guardrail is too eager | Raise the `jailbreak_standard` threshold from 0.35, or the `pii_detected` threshold from 0.25 |
-| A guardrail misses | Lower those thresholds, or add the phrase to the matching `keyword_rules` entry |
+| The domain classifier dominates | Raise `global.model_catalog.modules.classifier.domain.threshold` |
+| A guardrail is too eager | Raise `pii_detected` / `jailbreak_standard`, or allow specific entity types via `pii_types_allowed` |
+| A guardrail misses | Lower those thresholds, or add the phrase to the matching `signals.keywords` entry |
 
 Apply and restart:
 
