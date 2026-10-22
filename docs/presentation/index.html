@@ -247,6 +247,7 @@ table.s-table code, .mono { font-family: var(--mono); font-size: 14px; color: va
   position: absolute; right: 68px; bottom: 26px;
   font-family: var(--mono); font-size: 13px; color: var(--text-faint);
 }
+.pageno .at { color: var(--accent); }
 #progress {
   position: absolute; left: 0; bottom: 0; height: 3px;
   background: var(--accent-deep); transition: width 0.22s ease;
@@ -313,8 +314,10 @@ const esc = (s) => String(s).replace(/[&<>"']/g, c =>
 const tech = (s) => esc(s).replace(/(vllm-sr\/[a-z0-9-]+|model: &quot;auto&quot;)/g, '<span class="mono">$1</span>');
 
 function chrome(sl, i, n) {
+  // `at` is the cumulative clock position this slide should start at, so the
+  // presenter can see drift without a stopwatch. Demo slides carry none.
   return (sl.source ? `<div class="src">${esc(sl.source)}</div>` : '') +
-         `<div class="pageno">${i + 1} / ${n}</div>`;
+         `<div class="pageno">${sl.at ? `<span class="at">${esc(sl.at)}</span> · ` : ''}${i + 1} / ${n}</div>`;
 }
 
 function renderSlide(sl, i, n) {

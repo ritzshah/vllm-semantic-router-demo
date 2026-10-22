@@ -9,10 +9,23 @@
  * and strings, no trailing commas, no comments inside the object, no
  * expressions. `python3 build-pptx.py` will tell you if you slip.
  *
- * Every factual claim here is grounded in https://vllm-sr.ai/docs/ as of
- * 21 October 2026, or in this repository's own deployment. Where a figure
- * comes from older project material and has not been re-validated, the slide
- * says so rather than asserting it.
+ * TIMING. Budgeted at 20 minutes of slides plus a 10 minute live demo. The
+ * "at" field on each slide is the cumulative clock position where you should
+ * be *starting* that slide; the console prints it next to the page number so
+ * you can see drift without a stopwatch. Slides 19-21 are the demo handoff and
+ * carry no budget — that is the second 10 minutes.
+ *
+ * SOURCING. Every claim is one of three things, and the slides say which:
+ *   - measured on this deployment (the "What we measured" slide, and the demo)
+ *   - documented at vllm-sr.ai
+ *   - reported by the project / its maintainers, attributed on the slide
+ * Where a figure comes from someone else's measurements it is labelled as
+ * theirs. See DECK-REVIEW.md.
+ *
+ * STRUCTURE follows the arc used by Aayush Saini (Red Hat, vLLM-SR
+ * maintainer) in his technical deep dive, which lands the problem before the
+ * product: fragmentation -> cost -> why pipelines are content-blind -> the
+ * idea -> where it sits -> how it works -> proof -> enterprise -> demo.
  */
 
 const DECK = {
@@ -22,43 +35,75 @@ const DECK = {
   "slides": [
     {
       "type": "title",
+      "at": "0:00",
       "title": "Intelligence Beyond Any One Model",
       "subtitle": "vLLM Semantic Router",
-      "tagline": "Signal-driven routing, guardrails and semantic caching for Mixture-of-Models systems on OpenShift AI.",
-      "note": "Open on the premise, not the product. Nobody in this room runs one model. The question is who decides which one handles a given request — and today that decision is scattered across every application you own."
+      "tagline": "Signal-driven routing, guardrails and semantic caching for Mixture-of-Models systems — running live on OpenShift AI.",
+      "note": "20 minutes of slides, 10 minutes of live demo. Open on the premise, not the product: nobody in this room runs one model, and the question is who decides which one handles a given request."
+    },
+
+    {
+      "type": "columns",
+      "at": "1:00",
+      "title": "Fragmentation changed the problem",
+      "intro": "It is no longer \"which model is best\". The ecosystem fragments along four axes at once, and every one of them is a routing decision.",
+      "columns": [
+        { "heading": "Models & compute", "body": "Large, small, hybrid-reasoning, specialist, open and closed — across CPU, GPU, NPU and mixed fleets with different cost and energy profiles." },
+        { "heading": "Location", "body": "Cloud, data centre, edge. Where a request may execute is often a compliance question before it is a performance one." },
+        { "heading": "Preference", "body": "Quality, latency, cost, privacy. These conflict, and the right trade-off differs per request — not per application." }
+      ],
+      "callout": "Without a routing layer, every application has to navigate all four on its own.",
+      "note": "Four axes. Let the audience feel the combinatorics before you offer anything. The callout is the thesis of the whole talk."
     },
 
     {
       "type": "statement",
-      "title": "Every application is making the same decision, separately",
-      "lead": "Model choice is hard-coded in application code, repeated in every service, and invisible to the platform team.",
+      "at": "2:30",
+      "title": "Then the bill arrives",
+      "lead": "Uber burned through its entire 2026 AI budget in four months.",
       "points": [
-        "A trivial request and a hard one cost the same, because both named the same model.",
-        "Safety and privacy policy is re-implemented per application, inconsistently.",
-        "Nobody can answer “why did this request go there?” after the fact.",
-        "Adding a model means changing every client that might want it."
+        "5,000 engineers on Claude Code — token-metered, not per-seat.",
+        "84% adoption. Budget of $150–2,000 per engineer per month.",
+        "Exhausted in April: month four of twelve.",
+        "CTO Praveen Neppalli Naga: “I'm back to the drawing board — the budget I thought I would need is blown away already.”"
       ],
-      "note": "This is the pain. Let it land before naming the product. Most teams recognise at least three of these four."
+      "source": "case study via Aayush Saini, Red Hat — vLLM-SR maintainer",
+      "note": "This is the slide that makes a cost-conscious audience sit up. Do not rush it. The point is not that Uber was careless — it is that token-metered consumption with no routing layer has no natural ceiling."
+    },
+
+    {
+      "type": "columns",
+      "at": "4:00",
+      "title": "The root cause: inference pipelines are content-blind",
+      "intro": "A load balancer distributes requests without any idea what is in them. Four consequences, and all four are the same bug.",
+      "columns": [
+        { "heading": "Unnecessary spend", "body": "A one-line question and a distributed-systems design problem cost the same, because both named the same model." },
+        { "heading": "Data sovereignty", "body": "PII, financial and medical content leaves the data centre to reach a cloud model, because nothing inspected it on the way out." },
+        { "heading": "Safety & latency", "body": "Jailbreaks pass straight through to inference. Meanwhile trivial requests queue behind heavy reasoning work on the same backend." }
+      ],
+      "callout": "You cannot enforce a policy you cannot see. Routing has to read the request.",
+      "note": "Tie each of the four back to the fragmentation slide. The callout is the bridge into the product."
     },
 
     {
       "type": "statement",
-      "title": "A shared decision layer, not another SDK",
-      "lead": "“An open-source routing and control layer for building Mixture-of-Models systems across heterogeneous AI infrastructure.”",
+      "at": "5:30",
+      "title": "The idea, in one line",
+      "lead": "intent(prompt, context)  →  compose(model, mode, tools)",
       "points": [
-        "The right model path — direct, specialist, local, cascade, or collaborative.",
-        "The right supporting capabilities — retrieval, memory, tools, prompts, caching, verification.",
-        "The right execution boundary — configured cloud, data center, or edge backends.",
-        "Evidence for what happened — routing metadata plus feedback and evaluation workflows."
+        "Read intent, domain, complexity and risk from the prompt and its context.",
+        "Then compose the right model, the right mode, the right supporting capabilities.",
+        "Clients send model: \"auto\" over the ordinary OpenAI-compatible API. No SDK, no client change.",
+        "Intelligence moves upstream — the decision happens once at the gateway, not in every application."
       ],
-      "source": "vllm-sr.ai/docs/intro",
-      "note": "Read the quote verbatim — it is the project's own framing. The four bullets are the four things it decides. Note the fourth: this is auditable, which is what makes it a platform concern rather than a clever proxy."
+      "note": "Say the formula out loud. The fourth bullet is the architectural payoff: one place to change policy, one place to audit it."
     },
 
     {
       "type": "compare",
+      "at": "7:00",
       "title": "Mixture-of-Models is not Mixture-of-Experts",
-      "intro": "These get conflated constantly. They operate at completely different levels.",
+      "intro": "These get conflated constantly, and they operate at completely different levels.",
       "left": {
         "heading": "MoE — Mixture-of-Experts",
         "rows": [
@@ -71,185 +116,187 @@ const DECK = {
       "right": {
         "heading": "MoM — Mixture-of-Models",
         "rows": [
-          "A system pattern orchestrating multiple independent models.",
-          "Models differ in architecture, training data, capabilities and hardware.",
+          "A system pattern orchestrating independent models.",
+          "They differ in architecture, training data, capability, hardware.",
           "Chosen by you, in configuration, at request time.",
           "Every decision is declared in YAML and observable."
         ]
       },
-      "note": "If the audience takes one slide away, make it this one. MoE is someone else's decision baked into weights. MoM is your decision, in your config, that you can audit and change this afternoon."
-    },
-
-    {
-      "type": "statement",
-      "title": "How it attaches: an Envoy external processor",
-      "lead": "The router is not in your request path as a library. It is a gRPC external processor that Envoy consults mid-request.",
-      "points": [
-        "Clients speak the ordinary OpenAI-compatible API. No SDK, no client change.",
-        "Envoy calls the router over gRPC; the router classifies and returns a decision.",
-        "The router can answer immediately — a guardrail block or a cache hit never reaches a model.",
-        "Otherwise it rewrites the request and Envoy forwards it to the chosen backend."
-      ],
-      "note": "The architectural point: this composes with what you already run. Standard Envoy, Kubernetes Gateway API, Istio. It is not a new front door you have to adopt wholesale."
+      "note": "If they take one slide away, make it this one. MoE is someone else's decision baked into weights. MoM is your decision, in your config, that you can change this afternoon."
     },
 
     {
       "type": "pipeline",
+      "at": "8:00",
+      "title": "Where it sits: what, which, how",
+      "intro": "Three layers, one request path. The router complements your serving stack rather than replacing it.",
+      "steps": [
+        { "n": "1", "name": "WHAT — vLLM-SR", "body": "Chooses the logical model, from intent, complexity, privacy, modality and preference. At the gateway." },
+        { "n": "2", "name": "WHICH — serving layer", "body": "llm-d, vLLM Production Stack, AIBrix, Dynamo. Picks the replica, from load, queue depth and KV-cache locality." },
+        { "n": "3", "name": "HOW & WHERE — backends", "body": "vLLM and friends actually generate the tokens, on whichever accelerator and in whichever location policy allowed." }
+      ],
+      "note": "The router decides what logical model handles a request; the serving layer decides how to run it. Teams who already run llm-d or AIBrix need to hear that this sits in front of, not instead of, what they have."
+    },
+
+    {
+      "type": "statement",
+      "at": "9:00",
+      "title": "How it attaches: an Envoy external processor",
+      "lead": "Not a library in your request path. A gRPC external processor that Envoy consults mid-request.",
+      "points": [
+        "Envoy calls the router over gRPC; the router classifies and returns a decision.",
+        "It can answer immediately — a guardrail block or a cache hit never reaches a model at all.",
+        "Otherwise it sets x-selected-model and Envoy forwards to that model's cluster.",
+        "Standard Envoy, Kubernetes Gateway API, Istio. OpenAI- and Anthropic-compatible on the front."
+      ],
+      "callout": "Zero code changes. The clients in our demo are plain curl and a static HTML page.",
+      "note": "No rip and replace. Worth noting the header name: earlier builds used x-vsr-destination-endpoint with an IP; v0.3 sends the model name and Envoy owns a cluster per model."
+    },
+
+    {
+      "type": "pipeline",
+      "at": "10:00",
       "title": "The pipeline: five stages",
-      "intro": "Each stage has one job, and the separation is what makes the policy readable.",
+      "intro": "Each stage has one job, and that separation is what makes the policy readable and auditable.",
       "steps": [
         { "n": "1", "name": "Signals", "body": "Extract facts from the request, conversation, identity and content. Signals describe; they never choose a backend." },
         { "n": "2", "name": "Projections", "body": "Coordinate evidence. Combine several signal outputs into one reusable result." },
         { "n": "3", "name": "Decisions", "body": "Apply policy. Boolean rules over signals and projections, resolved by priority." },
         { "n": "4", "name": "Algorithms", "body": "Select one model, or coordinate several across a cascade, panel or multi-round workflow." },
-        { "n": "5", "name": "Model Pools", "body": "Execute. Providers bind logical model names to physical endpoints." }
+        { "n": "5", "name": "Model pools", "body": "Execute. Providers bind logical model names to physical endpoints." }
       ],
       "source": "vllm-sr.ai/docs/overview/signal-driven-decisions",
-      "note": "Walk left to right once, slowly. The rest of the deck is one slide per stage. Flag that stages 2 and 4 are the ones people usually have not seen."
+      "note": "Walk left to right once, slowly. Flag that stages 2 and 4 are the ones most people have not seen — the next three slides are one per group."
     },
 
     {
       "type": "columns",
-      "title": "Stage 1 — Signals extract facts",
-      "intro": "“A signal gives a name to something detected from the request, conversation, identity, or content.” Deterministic and learned signals sit side by side.",
+      "at": "11:00",
+      "title": "Stage 1 — Signals, and the models behind them",
+      "intro": "Deterministic rules and small fine-tuned classifiers sit side by side. All of it on CPU, in the router pod.",
       "columns": [
         { "heading": "Deterministic", "body": "Keyword lists, metadata predicates, context-length bands. Cheap, auditable, trivially explained to a compliance team — and trivially evaded." },
-        { "heading": "Learned", "body": "Embedding similarity and classifier models detecting intent, domain, complexity, PII and jailbreak patterns. More robust than keywords; probabilistic, and worth measuring on your own prompts." },
-        { "heading": "Dimensions observed", "body": "Intent, difficulty, context, modality, identity, risk, preference, and system state." }
+        { "heading": "Learned", "body": "The Vela-1.0-Encoder-307M family, which is the project's mmBERT encoder — our router logs it as model_type \"mmbert\". Domain (14 labels), Guard (benign/jailbreak), PII (35 BIO token tags over 17 entity types), plus an embedding model for routing and the cache." },
+        { "heading": "Swappable", "body": "Each is just a model_id in the config. Point it at your own fine-tune and it loads that instead — the project's own complexity classifier went 80.4% to 98.5% that way." }
       ],
       "callout": "Signals describe facts. They do not choose the backend.",
-      "note": "The callout is the design discipline that makes the whole thing composable: one signal can be reused by many decisions, because it has no opinion about outcomes."
+      "note": "The third column matters: these are not hard-wired. The callout is the design discipline that makes one signal reusable by many decisions."
     },
 
     {
       "type": "columns",
-      "title": "Stage 2 — Projections coordinate evidence",
-      "intro": "The stage most people have not seen. Projections turn overlapping, noisy signal output into something a policy can reference without repeating itself.",
-      "columns": [
-        { "heading": "Partitions", "body": "“Choose a coherent winner among overlapping matches.” When three domain classifiers all fire, a partition decides which one the policy acts on." },
-        { "heading": "Scores", "body": "“Combine weighted inputs.” Complexity and context evidence collapse into a single difficulty score." },
-        { "heading": "Mappings", "body": "“Convert a score into named routing bands.” A continuous difficulty score becomes easy / medium / hard, which a decision can match on." }
-      ],
-      "note": "This is what stops your decision list becoming an unmaintainable pile of overlapping conditions. Define the difficulty score once; reference it from ten decisions."
-    },
-
-    {
-      "type": "columns",
+      "at": "12:30",
       "title": "Stage 3 — Decisions apply policy",
-      "intro": "Boolean rules with arbitrary nesting over signals and projections. Priority resolves conflicts: the highest-priority matching decision wins.",
+      "intro": "Boolean rules with arbitrary nesting. Priority resolves conflicts — the highest-priority matching decision wins.",
       "columns": [
-        { "heading": "Eligibility before optimisation", "body": "“Authorization, local-only processing, modality, context capacity, and tool compatibility should make a route eligible or ineligible before an optimizer compares cost or latency.”" },
-        { "heading": "What a match supplies", "body": "Candidate models, an optional algorithm, and route-local plugins — so caching and guardrail behaviour can differ per route." },
-        { "heading": "Detection ≠ enforcement", "body": "A PII signal reports a match. The decision and its plugins choose whether to block, reroute, transform, or merely observe." }
+        { "heading": "Our ladder", "body": "Guardrails at 1000–1600 (PII, unsafe, jailbreak). Policy overrides at 220–300. Complexity at 140–145. Intent at 90–130. Fallbacks at 10–50, all pointing at the small model." },
+        { "heading": "Eligibility before optimisation", "body": "Authorization, local-only processing, modality and context capacity make a route eligible or ineligible before any optimiser compares cost or latency." },
+        { "heading": "Detection is not enforcement", "body": "A PII signal reports a match. The decision chooses whether to block, reroute to a local-only model, redact, or merely observe. The same detector, different policy per recipe." }
       ],
-      "callout": "Hard requirements stay visible in the policy, not buried in a scoring function.",
-      "note": "The third column is the governance story, and it is much stronger than ‘we block PII’. The same detector can be advisory in one recipe and blocking in another."
+      "callout": "Three-digit gap between guardrails and routing: a cost optimisation can never outrank a safety rule.",
+      "note": "The third column is the governance story and it is far stronger than \"we block PII\". In v0.3 pii stopped being a plugin type entirely — it is a signal, and enforcement belongs to the decision."
     },
 
     {
       "type": "columns",
-      "title": "Stage 4 — Algorithms select or coordinate",
-      "intro": "Two families. Most demos only ever show the first.",
+      "at": "14:00",
+      "title": "Stages 2 & 4 — Projections and Algorithms",
+      "intro": "The two stages most demos skip. Projections make policy readable; algorithms make it more than a switch statement.",
       "columns": [
-        { "heading": "Selection algorithms", "body": "Choose one candidate from the eligible set — by fixed order, semantic fit, measured latency, or accumulated feedback." },
-        { "heading": "Looper algorithms", "body": "Coordinate several models: cascades, panels, multi-round processes and workflows. One request, many models, orchestrated by the router." },
-        { "heading": "Why it sits here", "body": "Eligibility was already settled in stage 3, so an optimiser can compare cost and latency freely without violating a hard requirement." }
+        { "heading": "Projections", "body": "Partitions pick a coherent winner among overlapping matches. Scores combine weighted inputs. Mappings turn a score into named bands. Define a difficulty score once, reference it from ten decisions." },
+        { "heading": "Selection algorithms", "body": "Pick one candidate — fixed order, semantic fit, measured latency, multi-factor, or Elo-style learning from feedback. Our demo runs the simplest: static." },
+        { "heading": "Looper algorithms", "body": "Coordinate several models for one request. SELECT, CASCADE (escalate on confidence), FUSION (compare and synthesise), WORKFLOW (planner, thinker, worker, verifier)." }
       ],
-      "note": "Loopers are the part worth dwelling on — cascade cheap-then-expensive, or panel several models and compare. That is not routing any more; it is orchestration."
-    },
-
-    {
-      "type": "columns",
-      "title": "Stage 5 — Model pools execute",
-      "intro": "Providers bind logical model names to physical endpoints, so policy never hard-codes an address.",
-      "columns": [
-        { "heading": "Heterogeneous by design", "body": "Local vLLM or Ollama, Kubernetes services, and remote OpenAI-compatible endpoints can all sit in the same pool." },
-        { "heading": "Clear division of labour", "body": "The router picks the path; the backend owns replica placement. It does not try to be a load balancer." },
-        { "heading": "Pass-through is explicit", "body": "Naming a concrete backend model bypasses recipe signals, decisions, route-local plugins, cache, learning and session routing." }
-      ],
-      "note": "The third column is your demo's before/after in one sentence: pin a model and you opt out of everything the router does for you."
-    },
-
-    {
-      "type": "columns",
-      "title": "Recipes and entrypoints",
-      "intro": "A recipe is the unit of policy isolation. An entrypoint selects which recipe handles a request.",
-      "columns": [
-        { "heading": "What a recipe owns", "body": "Its own signals, projections, decisions, algorithms, plugins, cache namespace and routing state." },
-        { "heading": "What it shares", "body": "Providers and stores can be shared across recipes without policy leaking between them." },
-        { "heading": "Why you want this", "body": "Two teams, two risk appetites, one platform. Nobody has to agree on a single global threshold." }
-      ],
-      "note": "This is the answer to the question a platform team always asks: can I run different policies for different consumers without standing up a second router? Yes."
+      "callout": "quality = routing × diversity × verification × contract",
+      "note": "Loopers are the part worth dwelling on — cascade cheap-then-expensive, or panel several models and compare. That is no longer routing, it is orchestration. Be honest that our demo uses static selection and no loopers."
     },
 
     {
       "type": "table",
-      "title": "MoM V1 ships five built-in recipes",
-      "intro": "Each is exposed as a virtual model name, so adopting one is a string change in the client.",
+      "at": "15:00",
+      "title": "Recipes: policy you can adopt with one string",
+      "intro": "A recipe owns its own signals, projections, decisions, algorithms, plugins and cache namespace. An entrypoint picks which one handles a request.",
       "head": ["Recipe", "Virtual model", "Optimises for"],
       "rows": [
-        ["Balance", "vllm-sr/mom-v1-blend", "Difficulty, consequential advice and answer-recovery signals"],
+        ["Balance", "vllm-sr/mom-v1-blend", "Difficulty, consequential advice, answer recovery"],
         ["Speed", "vllm-sr/mom-v1-flash", "Lighter signal set, lowest added latency"],
         ["Cost", "vllm-sr/mom-v1-lite", "Lighter signal set, cheapest viable path"],
         ["Accuracy", "vllm-sr/mom-v1-ultra", "Usually one strong model"],
         ["Vault", "vllm-sr/mom-v1-vault", "Privacy — Guard and PII on Vela 2.0 0.3B"]
       ],
-      "source": "vllm-sr.ai/docs/next/overview/mom-model-family",
-      "note": "Very concrete. Point out that a team can start by swapping one string and tune a bespoke recipe later."
+      "callout": "Two teams, two risk appetites, one platform — and no shared global threshold to argue about.",
+      "note": "Very concrete. A team can start by swapping one model string and tune a bespoke recipe later. Our demo defines its own recipe rather than using these."
+    },
+
+    {
+      "type": "table",
+      "at": "16:00",
+      "title": "What the project reports",
+      "intro": "Figures published by the maintainers. Not ours — we have not reproduced them, and you should re-validate against your own workload.",
+      "head": ["Metric", "Reported", "Context"],
+      "rows": [
+        ["Traffic kept local", "86%", "Simple queries to free local models instead of cloud APIs"],
+        ["Routing latency", "40 ms P50", "~0.4% overhead against inference"],
+        ["Complexity accuracy", "80.4% → 98.5%", "Pretrained MiniLM vs their fine-tune; misrouting 19.6% → 1.5%"],
+        ["Fine-tune cost", "< 2 h on CPU", "23M-parameter model, drops in as a model swap"],
+        ["Selection algorithms", "11", "Static through Elo and Thompson sampling"],
+        ["Test-time scaling", "LiveCodeBench 92.6 · GPQA-Diamond 96.0", "A router improving on the models it routes to"]
+      ],
+      "source": "reported by the project / Aayush Saini — not reproduced by us",
+      "note": "Read the intro line verbatim. Volunteering that these are someone else's numbers buys more credibility than the numbers do. The fine-tuning finding worth quoting: +18% from the right loss function versus +2% from more data."
+    },
+
+    {
+      "type": "table",
+      "at": "17:00",
+      "title": "What we measured",
+      "intro": "Everything below came off the cluster behind this demo. Including the parts that did not work.",
+      "head": ["Finding", "Measured", "So what"],
+      "rows": [
+        ["Routing overhead", "192 ms, all signals on CPU", "~19% on a 1 s request, under 3% on a 7 s one. The project reports 40 ms — we run every signal family, and fact_check alone costs 178 ms"],
+        ["Guardrail block", "~900 ms, no GPU touched", "Answered by the router itself; a jailbreak costs no inference"],
+        ["Cache hit", "6.9 s → 0.75 s", "10× on an identical repeat"],
+        ["Cache precision", "1.0000 identical · 0.9650 wrong question · 0.8555 true paraphrase", "The wrong question outscores the paraphrase. At 0.95 it served an append/extend answer to an insert/remove question. Runs at 0.99"],
+        ["PII over-blocking", "\"starts on Monday\" and \"capital of France\"", "Blocked as DATE_TIME and GPE until we set an entity-type allow-list"],
+        ["Classifier footprint", "10.3 GB RAM, 5 CPU processes", "One process per Vela model; 8 GB OOMs"]
+      ],
+      "callout": "Thresholds do not transfer across model families. Measure on your own prompts before you trust a number — including ours.",
+      "note": "This is the slide no vendor deck has. The cache row is the one to linger on: an audience told that semantic caching understands meaning deserves to see the number where it does not."
     },
 
     {
       "type": "columns",
-      "title": "The model family behind the signals",
-      "intro": "Signal extraction runs on small, specialised models — not on the GPUs serving your traffic.",
+      "at": "18:00",
+      "title": "Routing is not enough",
+      "intro": "Defence in depth. Routing covers ingress; it cannot be the only control.",
       "columns": [
-        { "heading": "Vela 2.0 0.3B", "body": "Classification model used for Guard and PII in the Vault recipe. Reads up to 8,192 tokens, truncating beyond that." },
-        { "heading": "Decision models", "body": "Shipped open in v0.4 “Hermes”, alongside the Vela classification models, as one Mixture-of-Models system." },
-        { "heading": "CPU-native", "body": "Signal extraction does not need GPU compute. Your accelerators stay dedicated to serving tokens." }
+        { "heading": "1. Semantic routing", "body": "Classifies and places the majority of requests correctly, before any GPU work. Cheap, fast, and the first line." },
+        { "heading": "2. Evaluation & guardrails", "body": "Catch what routing misclassifies. Classification is probabilistic — plan for the tail, do not pretend it is not there." },
+        { "heading": "3. Egress controls", "body": "Filter sensitive content out of responses. A local model can still emit PII; routing never saw the answer, only the question." }
       ],
-      "note": "The CPU point is the one infrastructure people care about: the intelligence layer does not compete with the serving layer for GPUs."
+      "callout": "Sensitivity tiers in practice: Critical (PII, accounts) on-prem only with audit · High on-prem preferred · Medium cloud with DLP · Low anywhere.",
+      "note": "Be straight that our demo implements layer one and part of layer two, and no egress controls at all. Saying so is what makes the rest of the deck believable."
     },
 
     {
       "type": "columns",
-      "title": "Plugins: what happens on the way through",
-      "intro": "Configurable per decision, so a route can tighten or disable any of them.",
+      "at": "18:45",
+      "title": "Where this bites hardest: agents",
+      "intro": "An agent is not one request. It is a loop.",
       "columns": [
-        { "heading": "Semantic cache", "body": "Embedding similarity, not a hash — but measure before you trust it. Two *different* questions scored 0.9650 and 0.9431 against a cached entry, while a faithful reword scored only 0.8555. The wrong question outscores the paraphrase, and the near-miss score moves with the topic, so this deployment runs at 0.99 — repeats only." },
-        { "heading": "Prompt guard", "body": "Jailbreak detection combining deterministic phrase rules with a classifier, so an unseen phrasing is still caught." },
-        { "heading": "PII handling", "body": "Token-level entity detection. Whether that blocks, redacts, reroutes or just records is the decision's call, not the detector's." }
+        { "heading": "The multiplier", "body": "A single agent task generates 10–50+ model calls. Without routing, every one of them hits the same expensive model." },
+        { "heading": "The saving", "body": "Each call reaches the right model at the right cost — the project reports 80%+ reduction, and the easy sub-tasks come back in milliseconds from a local model." },
+        { "heading": "The safety case", "body": "Every call in the loop passes the same classification. One policy covers an agent you did not write and cannot inspect." }
       ],
-      "note": "Call out that a cache hit and a guardrail block are both answered by the router — neither reaches a GPU. That is where the latency contrast in the demo comes from."
-    },
-
-    {
-      "type": "columns",
-      "title": "Footprint and prerequisites",
-      "intro": "Two layers with very different hardware profiles.",
-      "columns": [
-        { "heading": "Router layer", "body": "Runs entirely on CPU. In the Kubernetes deployment in this repo the router pod requests 4 GB and is limited to 8 GB, and pulls roughly 4 GB of classifier weights onto a PVC on first start." },
-        { "heading": "Backend layer", "body": "GPUs, for the models actually generating tokens. Any OpenAI-compatible server — this demo uses vLLM on KServe." },
-        { "heading": "Deployment", "body": "Docker or Podman for local evaluation; Kubernetes for anything real." }
-      ],
-      "note": "Be honest about the 8 GB. Older material quotes ~440 MB, which is the adapter footprint, not what a Kubernetes pod loading four classifiers actually needs. Understating it only creates a support question later."
-    },
-
-    {
-      "type": "columns",
-      "title": "Compatible with what you already run",
-      "intro": "The router is an Envoy external processor, so it inherits the ecosystem rather than replacing it.",
-      "columns": [
-        { "heading": "API surface", "body": "OpenAI-compatible and Anthropic-compatible endpoints. Clients do not change." },
-        { "heading": "Infrastructure", "body": "Standard Envoy, Kubernetes Gateway API, Istio service mesh." },
-        { "heading": "Backends", "body": "vLLM, Ollama, Kubernetes services, and remote OpenAI-compatible providers, mixed freely in one pool." }
-      ],
-      "note": "Short slide. The message is ‘no rip and replace’ — do not spend long here."
+      "callout": "Agents do not need to know about model selection. They send model: \"auto\".",
+      "note": "This is the slide that lands with anyone building agentic systems — the cost multiplier is the whole argument, and it is the same argument as the Uber slide at a different scale."
     },
 
     {
       "type": "compare",
+      "at": "19:15",
       "title": "vLLM-SR and llm-d answer different questions",
-      "intro": "They are complementary, not competing. Most confusion about either one dissolves here.",
+      "intro": "Complementary, not competing. Most confusion about either one dissolves here.",
       "left": {
         "heading": "vLLM-SR — the model picker",
         "rows": [
@@ -268,61 +315,36 @@ const DECK = {
           "Output: a specific physical GPU instance."
         ]
       },
-      "note": "This was the strongest slide in the original deck and it survives unchanged. Semantics in front, hardware scheduling behind."
-    },
-
-    {
-      "type": "pipeline",
-      "title": "Together: one request, two routing layers",
-      "intro": "The semantic router goes in front, because there is no point scheduling GPU work for a request a guardrail is about to block.",
-      "steps": [
-        { "n": "1", "name": "Gateway", "body": "Request arrives at Istio or the Kubernetes Gateway API." },
-        { "n": "2", "name": "vLLM-SR", "body": "Signals, policy and guardrails. Selects a model — or answers immediately." },
-        { "n": "3", "name": "InferencePool", "body": "The chosen logical model resolves to a pool of replicas." },
-        { "n": "4", "name": "llm-d", "body": "Prefix-cache-aware scheduling picks the best replica." },
-        { "n": "5", "name": "GPU", "body": "Prefill and decode run where the cache already is." }
-      ],
-      "note": "Two caches, and they are complementary: the router's semantic cache skips whole requests; llm-d's prefix cache skips recomputing the shared front of every request."
+      "callout": "Two caches, too: ours skips whole requests; llm-d's prefix cache skips recomputing the front of every request.",
+      "note": "Semantics in front, hardware scheduling behind. This is the last slide before the demo — finish it and switch."
     },
 
     {
       "type": "columns",
       "title": "The demo: what is actually running",
-      "intro": "vLLM Semantic Router on OpenShift AI, in front of two vLLM backends on KServe.",
+      "intro": "vLLM Semantic Router on OpenShift AI, in front of two vLLM models on KServe. Everything you are about to see is live.",
       "columns": [
-        { "heading": "Front door", "body": "OpenShift Route → Envoy → the router as a gRPC external processor in the same pod. One OpenAI-compatible endpoint; clients send model: “auto”." },
-        { "heading": "Backends", "body": "Qwen-2.5-7B-Instruct for hard, urgent and quantitative work. Phi-3-mini for everything else. Each on its own GPU, served by vLLM on KServe." },
-        { "heading": "Policy", "body": "Fourteen decisions in one YAML file. Guardrails at priority 1000–1600, routing at 10–300, so a routing change can never outrank a safety rule." }
+        { "heading": "Front door", "body": "OpenShift Route → Envoy → the router as a gRPC external processor in the same pod. One OpenAI-compatible endpoint; the client sends model: \"auto\"." },
+        { "heading": "Backends", "body": "Qwen-2.5-7B-Instruct on an L40S for hard, urgent and quantitative work. Phi-3-mini on a T4 for everything else. Both served by vLLM on KServe." },
+        { "heading": "The brain is CPU-only", "body": "Five Vela processes and the Go router share one container on a plain worker with no GPU. The accelerators only ever generate tokens." }
       ],
-      "note": "This is the slide people photograph. Have the architecture diagram from the repo open in a second tab if anyone asks for detail."
+      "note": "The slide people photograph. Ten minutes from here. Have the console already open on a second tab with the counters cleared."
     },
 
     {
       "type": "table",
       "title": "Fifteen use cases, one click each",
-      "intro": "Every case declares the route it expects, so the console shows a pass or fail badge against reality.",
+      "intro": "Each declares the route it expects, so the console shows pass or fail against reality — including when it fails.",
       "head": ["Group", "What it shows", "Cases"],
       "rows": [
-        ["Intent routing", "Coding and math go to the 7B model; general chat goes to the 3.8B one. The client never changed.", "3"],
-        ["Complexity scaling", "The same topic, graded by difficulty, routed in opposite directions.", "2"],
-        ["Policy & priority", "Urgent security work overrides the cost optimiser. User pushback escalates and disables the cache.", "2"],
-        ["Guardrails", "Keyword rules and ML classifiers, blocking in tens of milliseconds with no GPU involved.", "5"],
-        ["Cache & cost", "A repeat returns in 0.7 s instead of 6.9 s. A two-word-different question is correctly refused. Pinning a model opts out of all of it.", "3"]
+        ["Intent routing", "Coding and math to the 7B model, general chat to the 3.8B. The client never changed.", "3"],
+        ["Complexity scaling", "Same topic, graded by difficulty, routed in opposite directions.", "2"],
+        ["Policy & priority", "Urgent security work overrides the cost optimiser; user pushback escalates and disables the cache.", "2"],
+        ["Guardrails", "Keyword rules and ML classifiers, blocking in under a second with no GPU involved.", "5"],
+        ["Cache & cost", "A repeat in 0.75 s instead of 6.9 s, a near-miss correctly refused, and pinning a model to opt out.", "3"]
       ],
-      "note": "Do not read the table. Switch to the console and run them. Lead with the two complexity cases back to back, then the two jailbreak cases back to back."
-    },
-
-    {
-      "type": "columns",
-      "title": "Where the project is going",
-      "intro": "Worth naming the release you are demoing — this is moving quickly.",
-      "columns": [
-        { "heading": "v0.4 “Hermes”", "body": "Shipped open Decision models and Vela classification models together as one Mixture-of-Models system." },
-        { "heading": "v0.5 “Ariadne”", "body": "Focused on following a route across models, sessions and evaluation — closing the loop from decision to outcome." },
-        { "heading": "Also in the docs", "body": "sr-bench 1.0 as the project's benchmark suite, and a Fleet Simulator for capacity planning and power modelling." }
-      ],
-      "callout": "Early project material quotes up to 10% higher accuracy, 50% lower latency and 50% fewer tokens. Treat those as indicative and re-validate against sr-bench for your own workload.",
-      "note": "Say the callout out loud rather than hiding it. Volunteering the caveat on your own numbers buys you more credibility than the numbers do."
+      "callout": "Suggested order: 1 → 3 → 4 → 5, then 7 → 8, then 13 → 14, then 11. Roughly 10 minutes.",
+      "note": "Do not read this table. Switch to the console and run them. Lead with the two complexity cases back to back, then the two jailbreak cases back to back — those pairs do the work."
     },
 
     {
@@ -334,7 +356,7 @@ const DECK = {
         "Upstream · github.com/vllm-project/semantic-router",
         "This demo · github.com/ritzshah/vllm-semantic-router-demo"
       ],
-      "note": "Switch to the console. Clear the counters first so the tally starts at zero in front of them."
+      "note": "Switch to the console. Press c first so the tally starts at zero in front of them."
     }
   ]
 };

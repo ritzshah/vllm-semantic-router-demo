@@ -144,12 +144,21 @@ def heading(slide, title, intro=None):
     return y + Inches(0.26)
 
 
-def chrome(slide, source, idx, total):
+def chrome(slide, source, idx, total, at=None):
+    """Source note bottom-left, clock position + page number bottom-right."""
     if source:
         tf = textbox(slide, M, H - Inches(0.52), Inches(7), Inches(0.3))
         para(tf, source, 9, FAINT, font=MONO, first=True)
-    tf = textbox(slide, W - M - Inches(1.6), H - Inches(0.52), Inches(1.6), Inches(0.3))
-    para(tf, f"{idx} / {total}", 10, FAINT, font=MONO, first=True, align=PP_ALIGN.RIGHT)
+    tf = textbox(slide, W - M - Inches(2.2), H - Inches(0.52), Inches(2.2), Inches(0.3))
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.RIGHT
+    if at:
+        r = p.add_run()
+        r.text = f"{at}  ·  "
+        r.font.size, r.font.color.rgb, r.font.name = Pt(10), ACCENT, MONO
+    r = p.add_run()
+    r.text = f"{idx} / {total}"
+    r.font.size, r.font.color.rgb, r.font.name = Pt(10), FAINT, MONO
 
 
 def notes(slide, text):
@@ -372,7 +381,7 @@ def main():
             else:
                 sys.exit(f"Unknown slide type {t!r} on slide {idx}")
 
-        chrome(slide, sl.get("source"), idx, total)
+        chrome(slide, sl.get("source"), idx, total, sl.get("at"))
         notes(slide, sl.get("note"))
 
     prs.save(OUT)

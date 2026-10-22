@@ -103,6 +103,63 @@ Both are in the rebuilt deck.
 
 ---
 
+## Second pass — restructured around Aayush Saini's arc (22 Oct)
+
+After reviewing the maintainer deck at
+[aadeshai.xyz/presentation-vllm-sr](https://aadeshai.xyz/presentation-vllm-sr/),
+the deck was rebuilt again: **21 slides, budgeted at 20 minutes plus a
+10-minute demo.** His running order lands the problem before the product, which
+is better than the structure I had.
+
+**Adopted from his deck**
+
+| | |
+|---|---|
+| Fragmentation framing | Four axes — models, compute, location, preference |
+| The Uber cost study | Entire 2026 AI budget gone in four months; 5,000 engineers on token-metered Claude Code |
+| "Content-blind" root cause | Spend, sovereignty, safety, latency as one bug |
+| The core formula | `intent(prompt, context) → compose(model, mode, tools)` |
+| WHAT / WHICH / HOW | Router, serving layer, backends |
+| Looper patterns | SELECT, CASCADE, FUSION, WORKFLOW |
+| Defence in depth | Routing → guardrails → **egress**; "routing is not enough" |
+| Agentic multiplier | 10–50 model calls per agent task |
+| Project figures | 86% local, 40 ms P50, 80.4% → 98.5% fine-tuned, 11 algorithms |
+
+All of his figures are attributed on-slide as the project's, not ours.
+
+**Deliberately not adopted**
+
+- The GPT-5 timing narrative — anchors the talk to one vendor's release and
+  will date badly.
+- The industry quote wall (Nadella, Huang, et al.) — filler in a 20-minute slot.
+
+**Added from our own deployment**
+
+A "What we measured" slide that neither deck has: routing overhead 192 ms,
+guardrail block ~900 ms with no GPU, cache 6.9 s → 0.75 s, the cache-precision
+table, the PII over-blocking on `DATE_TIME`/`GPE`, and the 10.3 GB classifier
+footprint. Including the parts that did not work.
+
+**Corrections to my own first pass**
+
+- Dropped "v0.4 Hermes / v0.5 Ariadne". We run `extproc:latest`
+  (`sha256:0108884a…`); there is no version endpoint and no codename in the
+  binary, so I could not substantiate it from the cluster. I had taken it from
+  the docs blog. Note also that the config's `version: v0.3` is the **config
+  schema** version, not the release.
+- Reconciled the model naming: his "mmBERT-32K, 307M params" and our
+  "Vela-1.0-Encoder-307M" are the same thing — our router logs
+  `model_type: "mmbert"`.
+- Removed the claim that the classifiers are LoRA adapters. On disk they are
+  full 1.2 GB fine-tunes with distinct heads: Domain 14 labels
+  (`ModernBertForSequenceClassification`), Guard 2, PII 35 BIO token tags
+  (`ModernBertForTokenClassification`).
+
+**Timing.** Every slide carries an `at` cue rendered in red beside the page
+number — the cumulative clock position it should start at. The demo slides
+carry none. `deck-harness.js` asserts the cues ascend and the last one lands
+inside 20 minutes.
+
 ## What is in this folder
 
 | File | What it is |
