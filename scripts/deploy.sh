@@ -50,8 +50,11 @@ fi
 
 if [[ "$SKIP_MODELS" == false ]]; then
   step "Preflight: GPU capacity"
+  # `|| true`: grep exits non-zero when no node reports a GPU, which under
+  # `set -euo pipefail` would abort the preflight instead of warning about it.
   gpus="$(oc get nodes -o jsonpath='{range .items[*]}{.status.capacity.nvidia\.com/gpu}{"\n"}{end}' \
-          | grep -E '^[0-9]+$' | awk '{s+=$1} END {print s+0}')"
+          | grep -E '^[0-9]+$' | awk '{s+=$1} END {print s+0}' || true)"
+  gpus="${gpus:-0}"
   if [[ "$gpus" -lt 2 ]]; then
     warn "Found $gpus allocatable NVIDIA GPU(s). This demo asks for 2 (one per model)."
     warn "Both InferenceServices will stay Pending until there is capacity."

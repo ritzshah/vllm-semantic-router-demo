@@ -86,7 +86,9 @@ ask() {
     return 0
   fi
 
-  content="$(printf '%s' "$body" | jq -r '.choices[0].message.content // ""')"
+  # `|| true` so a malformed body reports as a routing mismatch rather than
+  # aborting the whole run under `set -euo pipefail`.
+  content="$(printf '%s' "$body" | jq -r '.choices[0].message.content // ""' 2>/dev/null || true)"
 
   if printf '%s' "$content" | grep -qi 'request blocked'; then
     actual="$BLOCK"

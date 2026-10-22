@@ -40,12 +40,22 @@ fi
 # Hash the live config so we only bounce the router when the content actually
 # changed. The ConfigMap name is stable (no kustomize hash suffix) because the
 # router reads it from a mounted path, so nothing else would trigger a restart.
-before="$(oc get cm semantic-router-config -n "$NS" -o jsonpath='{.data.config\.yaml}' 2>/dev/null | shasum | awk '{print $1}')"
+#
+# The trailing `|| true` matters: on a first deploy the ConfigMap does not
+# exist, `oc get` exits non-zero, and under `set -euo pipefail` that would
+# abort the script here — silently, because the failure is inside a command
+# substitution on an assignment.
+config_hash() {
+  oc get cm semantic-router-config -n "$NS" -o jsonpath='{.data.config\.yaml}' 2>/dev/null \
+    | shasum | awk '{print $1}' || true
+}
+
+before="$(config_hash)"
 
 step "Applying router manifests"
 render | oc apply -n "$NS" -f -
 
-after="$(oc get cm semantic-router-config -n "$NS" -o jsonpath='{.data.config\.yaml}' | shasum | awk '{print $1}')"
+after="$(config_hash)"
 
 if [[ -n "$before" && "$before" != "$after" ]]; then
   step "Router config changed — restarting the router"
