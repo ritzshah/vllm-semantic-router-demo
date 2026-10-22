@@ -49,9 +49,11 @@ depending on what was actually asked.
 
 - OpenShift 4.14+ with **OpenShift AI / KServe** installed and the
   `serving.kserve.io` CRDs present.
-- **NVIDIA GPU Operator**, and **two allocatable GPUs** — one per model.
-  Nodes are expected to carry the taint `nvidia.com/gpu=true:NoSchedule`;
-  both InferenceServices tolerate it.
+- **NVIDIA GPU Operator**, and **two allocatable GPUs** — one per model. They do
+  not have to match: the reference deployment runs Qwen-2.5-7B on an L40S and
+  Phi-3-mini on a T4. See [GPU sizing](#gpu-sizing) below.
+- Tolerations use `operator: Exists` on the `nvidia.com/gpu` key, so any taint
+  *value* works (`true`, `l40-gpu`, `a10g`, …). Only the key has to match.
 - A default `StorageClass` supporting `ReadWriteOnce` (the router needs 15 Gi
   across two PVCs for its classifier models).
 - Cluster access with permission to create namespaces, and `oc`, `curl` and `jq`
@@ -88,6 +90,40 @@ Re-running is safe. Useful variants:
 ./scripts/wire-endpoints.sh         # after redeploying a model, repoint the router
 NS=my-demo ./scripts/deploy.sh      # different namespace
 ```
+
+### GPU sizing
+
+The two models are pinned to specific GPUs with a `nodeSelector` on
+`nvidia.com/gpu.product`, a label published by NVIDIA GPU Feature Discovery:
+
+| Model | Needs | Pinned to | Notes |
+|---|---|---|---|
+| `qwen-25-7b` | ~23 GB at `--max-model-len 20000` | `NVIDIA-L40S` | bf16 |
+| `phi-3-mini-chat` | ~13 GB at `--max-model-len 8192` | `Tesla-T4` | needs `--dtype float16` |
+
+Check what you have, then edit the two `nodeSelector` blocks in
+`deploy/models/` to match — or delete them if every GPU in your cluster is the
+same:
+
+```bash
+oc get nodes -L nvidia.com/gpu.product
+```
+
+Two things that bite on heterogeneous hardware:
+
+- **Pre-Ampere GPUs have no native bfloat16.** The T4 is Turing, so vLLM refuses
+  to start on a model whose config declares bf16 unless you pass
+  `--dtype float16`. Phi-3 already does. If you move a model onto a T4 or V100,
+  add the same flag.
+- **The device plugin allocates whole GPUs, not memory.** A 46 GB card already
+  hosting a small model has *no* allocatable GPU left, even with 40 GB free.
+  If a model stays `Pending` with `Insufficient nvidia.com/gpu` while
+  `nvidia-smi` shows plenty of headroom, that is why — see
+  [troubleshooting](docs/troubleshooting.md#a-model-stays-pending-but-the-gpu-looks-free).
+
+Need a second GPU node? `deploy/cluster/machineset-gpu-t4.yaml` adds a
+`g4dn.2xlarge` (1× T4) on AWS. It is cluster-specific — read the header comment
+for the fields to change before applying it anywhere else.
 
 ### Verify before you present
 

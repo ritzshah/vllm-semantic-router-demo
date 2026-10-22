@@ -155,14 +155,60 @@ oc describe pod -n models -l serving.kserve.io/inferenceservice=qwen-25-7b
 
 | Symptom | Cause |
 |---|---|
-| Pod `Pending`, `Insufficient nvidia.com/gpu` | Fewer than two allocatable GPUs. Check `oc get nodes -o custom-columns=NAME:.metadata.name,GPU:.status.capacity.'nvidia\.com/gpu'`. Scale the node pool, or drop `maxReplicas`/one of the models. |
-| Pod `Pending`, untolerated taint | Your GPU nodes carry a taint other than `nvidia.com/gpu=true:NoSchedule`. Update `tolerations` in both InferenceServices. |
+| Pod `Pending`, `Insufficient nvidia.com/gpu` | See the next section — it is usually not what it looks like. |
+| Pod `Pending`, `didn't match Pod's node affinity/selector` | The `nodeSelector` on `nvidia.com/gpu.product` names a GPU you do not have. Run `oc get nodes -L nvidia.com/gpu.product` and edit the two InferenceServices, or remove the blocks entirely. |
+| Pod `Pending`, untolerated taint | Your GPU nodes carry a taint with a key other than `nvidia.com/gpu`. The manifests tolerate that key with `operator: Exists`, so any *value* is fine, but a different key needs a new toleration. |
+| `ValueError: Bfloat16 is only supported on GPUs with compute capability of at least 8.0` | A pre-Ampere GPU (T4, V100). Add `--dtype float16` to that model's `args`. |
 | `ImagePullBackOff` on `registry.redhat.io/rhaiis/...` | No pull secret for `registry.redhat.io` in the namespace. Add one, or link it to the `default` ServiceAccount. |
 | Container starts then exits during model load | GPU memory. Lower `--gpu-memory-utilization`, or `--max-model-len` (20000 for Qwen, 8192 for Phi). |
 | `Unknown deployment mode "Standard"` | An older KServe. Change `serving.kserve.io/deploymentMode` to `RawDeployment` in both InferenceServices. |
 
 A model that is slow rather than stuck is normal on a first run — Qwen-2.5-7B
 is roughly 15 GB from Hugging Face.
+
+### A model stays Pending but the GPU looks free
+
+This one wastes an afternoon if you have not hit it before.
+
+```
+0/9 nodes are available: 1 Insufficient nvidia.com/gpu, ...
+```
+
+…while `nvidia-smi` on that node reports 40 GB of 46 GB free.
+
+**The NVIDIA device plugin allocates whole GPUs, not memory.** One pod holding
+`nvidia.com/gpu: 1` owns the entire device as far as the scheduler is concerned,
+however little of it that pod actually uses. A second pod cannot have a slice of
+what is left.
+
+Find who is holding them:
+
+```bash
+oc get pods -A -o json \
+  | jq -r '.items[]
+      | select(any(.spec.containers[]; .resources.limits["nvidia.com/gpu"]))
+      | "\(.metadata.namespace)/\(.metadata.name)  node=\(.spec.nodeName)"'
+```
+
+Then pick one:
+
+- **Stop the other workload.** Fastest, free. Note that a KServe
+  `InferenceService` or `LLMInferenceService` will recreate its Deployment —
+  scaling the Deployment to 0 gets reconciled straight back. Delete the
+  custom resource (back it up first) if you need it genuinely stopped rather
+  than merely unschedulable.
+- **Enable GPU time-slicing**, so the device plugin advertises several virtual
+  GPUs per card. Both pods then schedule — but they *share the memory*, so this
+  only helps if the card actually has headroom. Check before you bother:
+
+  ```bash
+  oc debug node/<gpu-node> -- chroot /host nvidia-smi \
+    --query-gpu=name,memory.total,memory.used --format=csv
+  ```
+
+  A server started with `--gpu-memory-utilization 0.9` has already reserved 90%
+  of the card, and time-slicing will not claw any of it back.
+- **Add a GPU node.** See `deploy/cluster/machineset-gpu-t4.yaml`.
 
 ---
 
