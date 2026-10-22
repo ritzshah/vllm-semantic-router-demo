@@ -108,18 +108,15 @@ data:
         - name: computer_science
           description: Programming and computer science tasks
           mmlu_categories:
-          - computer_security
-          - machine_learning
-          - high_school_computer_science
-          - college_computer_science
+          - computer science
         - name: mathematics
           description: Math and quantitative problem solving
           mmlu_categories:
-          - abstract_algebra
-          - college_mathematics
-          - elementary_mathematics
-          - high_school_mathematics
-          - high_school_statistics
+          - math
+        - name: other
+          description: Catch-all for prompts that are neither programming nor mathematics
+          mmlu_categories:
+          - other
         fact_check:
         - name: needs_verification
           description: Queries likely requiring factual verification
@@ -132,7 +129,7 @@ data:
         language:
         - name: en
           description: English-language requests
-        context_rules:
+        context:
         - name: low_token_count
           min_tokens: '0'
           max_tokens: 1K
@@ -294,8 +291,7 @@ data:
         plugins:
         - type: fast_response
           configuration:
-            message: 'Request blocked: Sensitive PII (Name/Email/Phone) detected. Please
-              redact personal info before submitting.'
+            message: 'Request blocked: Sensitive PII (Name/Email/Phone) detected. Please redact personal info before submitting.'
       - name: block_pii_content
         description: 'Privacy Guardrail: Block any request containing PII'
         priority: 1500
@@ -310,8 +306,7 @@ data:
         plugins:
         - type: fast_response
           configuration:
-            message: 'Request blocked: Sensitive PII (Name/Email) detected. Please redact
-              personal info before submitting.'
+            message: 'Request blocked: Sensitive PII (Name/Email) detected. Please redact personal info before submitting.'
       - name: block_unsafe_content
         description: Deterministic guardrail for explicit harmful-content requests
         priority: 1200
@@ -357,8 +352,7 @@ data:
             threshold: 0.25
             pii_types_allowed: []
       - name: user_feedback_escalation
-        description: Escalate correction requests to stronger model with anti-hallucination
-          guidance
+        description: Escalate correction requests to stronger model with anti-hallucination guidance
         priority: 220
         rules:
           operator: OR
@@ -378,9 +372,7 @@ data:
           configuration:
             enabled: true
             mode: replace
-            system_prompt: You are in correction mode. Re-evaluate the prior answer carefully.
-              If uncertain, explicitly say you are not sure instead of guessing. Keep
-              the answer concise and factual.
+            system_prompt: You are in correction mode. Re-evaluate the prior answer carefully. If uncertain, explicitly say you are not sure instead of guessing. Keep the answer concise and factual.
         - type: pii
           configuration:
             enabled: true
@@ -562,12 +554,8 @@ data:
             name: low_token_count
           - type: complexity
             name: code_complexity:hard
-          - type: modality
-            name: autoregressive
           - type: pii
             name: pii_detected
-          - type: authz
-            name: admin
         modelRefs:
         - model: phi-3-mini-chat
           use_reasoning: false

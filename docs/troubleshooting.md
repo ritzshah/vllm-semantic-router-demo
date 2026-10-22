@@ -129,9 +129,45 @@ oc logs -n models deploy/semantic-router -c semantic-router --previous --tail=10
 
 | In the log | Cause |
 |---|---|
+| `config file must use the canonical v0.3 hierarchy` | Your config is the older flat layout. See below. |
 | `no such file or directory` under `/app/models` | The init container did not finish. Check it first. |
 | OOMKilled, or the pod is killed while loading | Four ModernBERT models on CPU need headroom. Raise the memory limit from 8 Gi. |
 | A gated-model or 401 error mentioning `mom-embedding-light` | The init container's alias step did not run. Delete the models PVC and redeploy: `./scripts/undeploy.sh --pvcs` then `./scripts/deploy.sh --skip-models`. |
+
+### `config file must use the canonical v0.3 hierarchy`
+
+The router image moved to a new config schema and will not start on the older
+flat layout (top-level `vllm_endpoints`, `keyword_rules`, `decisions`, …). The
+config in this repo is already v0.3, so you only hit this if you brought your
+own.
+
+Do not hand-rewrite it — the project ships a migration. The CLI entry point is
+not on `PATH` in the extproc image, so call the function directly:
+
+```bash
+oc get cm semantic-router-config -n models -o jsonpath='{.data.config\.yaml}' > old-config.yaml
+
+oc run vsr-migrate --restart=Never -n models \
+  --image=ghcr.io/vllm-project/semantic-router/extproc:latest \
+  --command -- sleep 600
+oc wait --for=condition=Ready pod/vsr-migrate -n models --timeout=5m
+
+oc exec -i -n models vsr-migrate -- python3 -c '
+import sys, yaml
+sys.path.insert(0, "/app")
+from cli.config_migration import migrate_config_data
+from cli.config_migration_notes import MigrationNotes
+print(yaml.safe_dump(migrate_config_data(yaml.safe_load(sys.stdin.read()), MigrationNotes()),
+                     sort_keys=False, allow_unicode=True))
+' < old-config.yaml > new-config.yaml
+
+oc delete pod vsr-migrate -n models
+```
+
+The migration emits **literal endpoint IPs**. Swap them back for
+`__QWEN_ENDPOINT_IP__` / `__PHI_ENDPOINT_IP__` before committing, or
+`wire-endpoints.sh` has nothing to substitute and the config will be wrong on
+the next cluster.
 
 ### PVC `Pending`
 
