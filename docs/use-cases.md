@@ -177,9 +177,16 @@ A person, a phone number, an email address and a date — and none of the keywor
 lead-ins, so 1600 misses it. A ModernBERT token classifier trained on the
 Presidio PII dataset tags the entities at threshold 0.25 and 1500 fires.
 
-Note also that every *routing* decision carries its own inline `pii` plugin, so
-PII is re-checked on the path to each model even after the global guardrails
-have passed.
+Worth saying out loud while this one runs: **detection and enforcement are
+separate here.** `pii` is a *signal* — it reports that personal data is present,
+and nothing more. What happens next is the decision's call. `block_pii_content`
+chooses to stop the request, but another recipe could reroute it to a
+local-only model, redact it, or simply record that it happened. One detector,
+many possible policies.
+
+(Earlier versions also let each routing decision carry an inline `pii` *plugin*.
+v0.3 removed that plugin type entirely — the separation is now enforced by the
+schema rather than merely encouraged.)
 
 ---
 

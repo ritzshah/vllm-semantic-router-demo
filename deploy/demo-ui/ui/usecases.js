@@ -433,11 +433,13 @@ const USE_CASES = [
       'This prompt contains a person, a phone number, an email address and a date, but ' +
       'none of the keyword lead-ins — so the rule at 1600 misses it. A ModernBERT token ' +
       'classifier trained on the Presidio PII dataset tags the entities at a threshold ' +
-      'of 0.25 and the block fires at 1500. Note that every routing decision also ' +
-      'carries its own inline pii plugin, so PII is re-checked on the path to each model.',
+      'of 0.25 and the block fires at 1500. Note the division of labour: pii is a ' +
+      'signal that only reports what it found. Blocking is the decision’s choice — ' +
+      'another recipe could reroute to a local-only model, redact, or just record it.',
     talk:
       'Same guardrail, different mechanism. No magic phrases here, just a record someone ' +
-      'pasted out of a CRM. Token-level classification catches the entities themselves.',
+      'pasted out of a CRM. Token-level classification catches the entities themselves. ' +
+      'And note the detector does not decide what happens — the policy does.',
     steps: [
       {
         label: 'auto → blocked?',

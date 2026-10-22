@@ -29,78 +29,15 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-      initContainers:
-      # Pulls the classifier and embedding models onto the PVC. Runs once; on
-      # subsequent restarts every snapshot_download is skipped because the
-      # directory already exists, so pod restarts are fast.
-      - name: model-downloader
-        image: python:3.11-slim
-        command: ["/bin/bash", "-c"]
-        args:
-        - |
-          set -e
-          pip install --no-cache-dir --user huggingface_hub
-          python3 << 'PYEOF'
-          import os
-          from huggingface_hub import snapshot_download
-
-          models = [
-            ("LLM-Semantic-Router/category_classifier_modernbert-base_model", "category_classifier_modernbert-base_model"),
-            ("LLM-Semantic-Router/pii_classifier_modernbert-base_model", "pii_classifier_modernbert-base_model"),
-            ("LLM-Semantic-Router/jailbreak_classifier_modernbert-base_model", "jailbreak_classifier_modernbert-base_model"),
-            ("LLM-Semantic-Router/pii_classifier_modernbert-base_presidio_token_model", "pii_classifier_modernbert-base_presidio_token_model"),
-            ("sentence-transformers/all-MiniLM-L12-v2", "all-MiniLM-L12-v2")
-          ]
-
-          for repo_id, local_dir_name in models:
-            local_dir = os.path.join("/app/models", local_dir_name)
-            if not os.path.exists(local_dir):
-              print(f"downloading {repo_id}", flush=True)
-              snapshot_download(repo_id=repo_id, local_dir=local_dir, cache_dir="/app/cache/hf")
-            else:
-              print(f"already present: {local_dir_name}", flush=True)
-
-          # The semantic cache defaults to models/mom-embedding-light, which is
-          # gated on the Hub. Alias it to MiniLM so the cache initialises
-          # without requiring Hugging Face credentials.
-          src = "/app/models/all-MiniLM-L12-v2"
-          dst = "/app/models/mom-embedding-light"
-          if os.path.exists(src) and not os.path.exists(dst):
-            import shutil
-            shutil.copytree(src, dst)
-            print("aliased mom-embedding-light -> all-MiniLM-L12-v2", flush=True)
-          PYEOF
-        env:
-        - name: HF_HUB_CACHE
-          value: /app/cache/hf
-        - name: HF_HOME
-          value: /app/cache/hf
-        - name: TRANSFORMERS_CACHE
-          value: /app/cache/transformers
-        - name: PIP_CACHE_DIR
-          value: /tmp/pip_cache
-        - name: PYTHONUSERBASE
-          value: /tmp/python_user
-        - name: PATH
-          value: /tmp/python_user/bin:/usr/local/bin:/usr/bin:/bin
-        resources:
-          requests:
-            cpu: 500m
-            memory: 1Gi
-          limits:
-            cpu: "1"
-            memory: 2Gi
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
-          seccompProfile:
-            type: RuntimeDefault
-        volumeMounts:
-        - name: models-volume
-          mountPath: /app/models
-        - name: cache-volume
-          mountPath: /app/cache
+      # No init container. Earlier versions of this demo pre-pulled four
+      # ModernBERT classifiers and MiniLM, and aliased MiniLM to
+      # mom-embedding-light to dodge a gated default. The v0.3 router uses the
+      # Vela-1.0-Encoder-307M family instead and fetches it through its own
+      # model runtime on first start, so pre-staging those files only consumed
+      # several GB of the PVC and was never read.
+      #
+      # First start therefore downloads ~5 GB inside the router container and
+      # takes a few minutes. The startup probe below allows up to 10.
       containers:
       - name: semantic-router
         image: ghcr.io/vllm-project/semantic-router/extproc:latest

@@ -124,11 +124,34 @@ def each_condition(node, &blk)
   Array(node['conditions']).each { |c| each_condition(c, &blk) }
 end
 
+# Plugin types the v0.3 router accepts. Notably `pii` is NOT one: PII is a
+# signal that detects, and a decision enforces. That separation is deliberate
+# upstream — the same detector can block in one recipe and merely observe in
+# another.
+PLUGIN_TYPES = %w[fast_response response_cache system_prompt prompt_guard
+                  tool_selection memory reasoning].freeze
+PLUGIN_ALIASES = { 'semantic-cache' => 'response_cache' }.freeze
+
 seen_names = []
 decisions.each do |d|
   name = d['name']
   seen_names << name
   errors << "a decision has no priority: #{name.inspect}" if d['priority'].nil?
+
+  Array(d['plugins']).each do |p|
+    t = p['type']
+    next if PLUGIN_TYPES.include?(t)
+    if PLUGIN_ALIASES.key?(t)
+      warnings << "#{name}: plugin #{t.inspect} is a deprecated alias for " \
+                  "#{PLUGIN_ALIASES[t].inspect}"
+    elsif t == 'pii'
+      errors << "#{name}: plugin type \"pii\" no longer exists — PII is a signal, and " \
+                "enforcement belongs in a decision (see block_pii_content)"
+    else
+      errors << "#{name}: unsupported plugin type #{t.inspect} " \
+                "(supported: #{PLUGIN_TYPES.join(', ')})"
+    end
+  end
 
   each_condition(d['rules']) do |c|
     family = TYPE_TO_FAMILY[c['type']]

@@ -128,23 +128,58 @@ Within the guardrails, **deterministic rules outrank classifiers** — 1600 abov
 1500, 1100 above 1000. The cheap check runs first and the ML model is the
 safety net underneath it, not the other way around.
 
+## The config layout
+
+The router config uses the **canonical v0.3 hierarchy**, and refuses to start
+on anything else. Six top-level keys:
+
+| Key | Holds |
+|---|---|
+| `version` | `v0.3` |
+| `global` | `model_catalog` (the embedding model and the prompt-guard / classifier modules), `router`, and `stores` — including the response cache |
+| `listeners` | Transport configuration |
+| `entrypoints` | Maps client-visible model names to a recipe. `auto` → the default recipe |
+| `providers` | `defaults` (default model, reasoning effort) and `models`, each with `backend_refs` carrying an endpoint and a reasoning family |
+| `routing` | `signals` and `decisions` |
+
+If you are porting an older config, do not hand-rewrite it — the image ships a
+migration. See
+[troubleshooting](troubleshooting.md#config-file-must-use-the-canonical-v03-hierarchy).
+
+Before applying any change, run the offline validator:
+
+```bash
+./scripts/validate-config.sh
+```
+
+It checks the canonical key names, that every decision condition resolves to a
+declared signal, that `modelRefs` resolve to `providers.models`, and that
+`mmlu_categories` uses only the 14 supported MMLU-Pro categories. The router
+checks the same things, but one error per startup — this reports them all at
+once, in about a second.
+
 ## The semantic cache
 
-Caching is configured globally and then tightened per decision:
+Caching is configured globally under `global.stores.response_cache` and then
+tightened per decision:
 
 ```yaml
-semantic_cache:
-  enabled: true
-  backend_type: "memory"
-  similarity_threshold: 0.85
-  max_entries: 1000
-  ttl_seconds: 3600
-  eviction_policy: "fifo"
+global:
+  stores:
+    response_cache:
+      enabled: true
+      backend_type: "memory"
+      similarity_threshold: 0.85
+      max_entries: 1000
+      ttl_seconds: 3600
+      eviction_policy: "fifo"
 ```
 
 A request is embedded with MiniLM; if an existing entry is within the cosine
 threshold, its answer is returned without contacting a model. Individual
-decisions override the threshold through the `semantic-cache` plugin —
+decisions override the threshold through the `response_cache` plugin (named
+`semantic-cache` before v0.3; the old alias still works but logs a deprecation
+warning on every decision that uses it) —
 `coding_hard_complexity` uses 0.93 because a near-miss on a hard problem is more
 costly than a cache miss, and `user_feedback_escalation` disables the cache
 entirely, because replaying a cached answer to someone who just said the answer

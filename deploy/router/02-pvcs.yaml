@@ -1,6 +1,9 @@
-# models  — the four ModernBERT classifiers plus the MiniLM embedding model
-#           (~4 GB), downloaded once by the init container.
-# cache   — Hugging Face / transformers download cache, kept separate so the
+# models  — the Vela-1.0-Encoder-307M family and the router's model runtime,
+#           downloaded by the router itself on first start. Budget ~6 GB today
+#           and leave room: the runtime grows as model families are added, and
+#           running out mid-download fails with a bare
+#           "No space left on device (os error 28)" that does not name the volume.
+# cache    — Hugging Face / transformers download cache, kept separate so the
 #           model volume stays clean and can be reused across router restarts.
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -17,7 +20,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
+      storage: 25Gi
   volumeMode: Filesystem
 ---
 apiVersion: v1

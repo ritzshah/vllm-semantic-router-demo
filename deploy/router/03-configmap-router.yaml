@@ -346,11 +346,6 @@ data:
           configuration:
             enabled: true
             similarity_threshold: 0.92
-        - type: pii
-          configuration:
-            enabled: true
-            threshold: 0.25
-            pii_types_allowed: []
       - name: user_feedback_escalation
         description: Escalate correction requests to stronger model with anti-hallucination guidance
         priority: 220
@@ -373,11 +368,6 @@ data:
             enabled: true
             mode: replace
             system_prompt: You are in correction mode. Re-evaluate the prior answer carefully. If uncertain, explicitly say you are not sure instead of guessing. Keep the answer concise and factual.
-        - type: pii
-          configuration:
-            enabled: true
-            threshold: 0.25
-            pii_types_allowed: []
       - name: coding_hard_complexity
         description: 'Complexity-aware scaling: hard coding tasks -> qwen'
         priority: 145
@@ -394,11 +384,6 @@ data:
           configuration:
             enabled: true
             similarity_threshold: 0.93
-        - type: pii
-          configuration:
-            enabled: true
-            threshold: 0.25
-            pii_types_allowed: []
       - name: coding_easy_complexity
         description: 'Complexity-aware scaling: easy coding tasks -> phi'
         priority: 140
@@ -415,11 +400,6 @@ data:
           configuration:
             enabled: true
             similarity_threshold: 0.9
-        - type: pii
-          configuration:
-            enabled: true
-            threshold: 0.25
-            pii_types_allowed: []
       - name: block_jailbreak_keywords
         description: Deterministic jailbreak guardrail using keyword patterns
         priority: 1100
@@ -470,11 +450,6 @@ data:
           configuration:
             enabled: true
             similarity_threshold: 0.92
-        - type: pii
-          configuration:
-            enabled: true
-            threshold: 0.25
-            pii_types_allowed: []
       - name: math
         description: 'Signal-decision route: math keyword or domain -> qwen'
         priority: 120
@@ -495,11 +470,6 @@ data:
           configuration:
             enabled: true
             similarity_threshold: 0.92
-        - type: pii
-          configuration:
-            enabled: true
-            threshold: 0.25
-            pii_types_allowed: []
       - name: general
         description: 'Signal-decision route: general chat keyword -> phi'
         priority: 90
@@ -513,12 +483,6 @@ data:
         modelRefs:
         - model: phi-3-mini-chat
           use_reasoning: false
-        plugins:
-        - type: pii
-          configuration:
-            enabled: true
-            threshold: 0.25
-            pii_types_allowed: []
       - name: general_domain
         description: Classifier route for non-technical prompts -> phi
         priority: 50
@@ -530,12 +494,6 @@ data:
         modelRefs:
         - model: phi-3-mini-chat
           use_reasoning: false
-        plugins:
-        - type: pii
-          configuration:
-            enabled: true
-            threshold: 0.25
-            pii_types_allowed: []
       - name: extended_signals_enablement
         description: Low-priority decision to activate additional signal families
         priority: 10
