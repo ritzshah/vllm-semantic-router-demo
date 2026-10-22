@@ -1,10 +1,32 @@
-# vLLM Semantic Router configuration.
+# vLLM Semantic Router configuration — canonical v0.3 hierarchy.
 #
-# IMPORTANT: vllm_endpoints below contains the placeholders __QWEN_ENDPOINT_IP__
-# and __PHI_ENDPOINT_IP__. Run scripts/wire-endpoints.sh (or scripts/deploy.sh,
-# which calls it) to substitute the live ClusterIPs of the stable backend
-# Services before applying. Applying this file unsubstituted will leave the
-# router unable to reach any backend.
+# Produced by the project's own migration (`migrate_config_data` from the
+# extproc image) out of the older flat layout, then re-parameterised. The
+# router refuses to start on the old shape:
+#
+#   config file must use the canonical v0.3 hierarchy; unexpected top-level
+#   keys: auto_model_name, bert_model, categories, classifier, decisions, ...
+#
+# The v0.3 shape, and where the old keys went:
+#
+#   version        "v0.3"
+#   global         model_catalog (embedding + prompt_guard/classifier modules),
+#                  router, stores (response_cache <- semantic_cache)
+#   listeners      transport config
+#   entrypoints    model_names -> recipe. "auto" maps to the default recipe.
+#   providers      defaults (default model, reasoning effort) and models, each
+#                  with backend_refs carrying the endpoint and reasoning family
+#                  (<- vllm_endpoints + model_config + reasoning_families)
+#   routing        signals (<- signals + keyword_rules, now signals.keywords)
+#                  and decisions (unchanged in meaning)
+#
+# The `semantic-cache` plugin alias is now `response_cache`; the old name still
+# works but logs a deprecation warning on every decision that uses it.
+#
+# IMPORTANT: backend_refs carry the placeholders __QWEN_ENDPOINT_IP__ and
+# __PHI_ENDPOINT_IP__. Run scripts/wire-endpoints.sh (or scripts/deploy.sh,
+# which calls it) to substitute the live ClusterIPs before applying. Envoy's
+# ORIGINAL_DST cluster resolves no DNS, so these must be literal IPs.
 #
 # Decision priorities, highest first:
 #   1600 block_pii_keywords          guardrail  (deterministic)
@@ -33,518 +55,558 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 data:
   config.yaml: |
-    bert_model:
-      model_id: models/all-MiniLM-L12-v2
-      threshold: 0.6
-      use_cpu: true
-
-    auto_model_name: "auto"
-
-    semantic_cache:
-      enabled: true
-      backend_type: "memory"
-      similarity_threshold: 0.85
-      max_entries: 1000
-      ttl_seconds: 3600
-      eviction_policy: "fifo"
-
-    prompt_guard:
-      enabled: true
-      use_modernbert: true
-      model_id: "models/jailbreak_classifier_modernbert-base_model"
-      threshold: 0.7
-      use_cpu: true
-
-    embedding_models:
-      bert_model_path: "models/all-MiniLM-L12-v2"
-      use_cpu: true
-
-    vllm_endpoints:
-      - name: "qwen-endpoint"
-        address: "__QWEN_ENDPOINT_IP__"
-        port: 8080
-        weight: 1
-      - name: "phi-endpoint"
-        address: "__PHI_ENDPOINT_IP__"
-        port: 8080
-        weight: 1
-
-    model_config:
-      "qwen-25-7b":
-        reasoning_family: "qwen3"
-        preferred_endpoints: ["qwen-endpoint"]
-        pii_policy:
-          allow_by_default: false
-          pii_types_allowed: []
-      "phi-3-mini-chat":
-        preferred_endpoints: ["phi-endpoint"]
-        pii_policy:
-          allow_by_default: false
-          pii_types_allowed: []
-
-    classifier:
-      category_model:
-        model_id: "models/category_classifier_modernbert-base_model"
-        use_modernbert: true
-        threshold: 0.10
-        use_cpu: true
-      pii_model:
-        model_id: "models/pii_classifier_modernbert-base_presidio_token_model"
-        use_modernbert: true
-        threshold: 0.25
-        use_cpu: true
-
-    signals:
-      embeddings:
-        - name: "coding_intent"
+    version: v0.3
+    listeners: []
+    providers:
+      defaults:
+        model: phi-3-mini-chat
+        reasoning_effort: high
+      models:
+      - name: qwen-25-7b
+        backend_refs:
+        - name: qwen-endpoint
+          endpoint: __QWEN_ENDPOINT_IP__:8080
+          weight: 1
+          provider: vllm
+        reasoning:
+          type: chat_template_kwargs
+          parameter: enable_thinking
+      - name: phi-3-mini-chat
+        backend_refs:
+        - name: phi-endpoint
+          endpoint: __PHI_ENDPOINT_IP__:8080
+          weight: 1
+          provider: vllm
+    routing:
+      signals:
+        embeddings:
+        - name: coding_intent
           threshold: 0.68
           candidates:
-            - "debug production application issues"
-            - "review and improve source code quality"
-            - "design software architecture and APIs"
-            - "fix failing unit and integration tests"
-          aggregation_method: "max"
-        - name: "math_intent"
+          - debug production application issues
+          - review and improve source code quality
+          - design software architecture and APIs
+          - fix failing unit and integration tests
+          aggregation_method: max
+        - name: math_intent
           threshold: 0.68
           candidates:
-            - "solve mathematical equation with steps"
-            - "calculate statistics and probability values"
-            - "derive formulas and explain calculus"
-            - "linear algebra and numerical reasoning"
-          aggregation_method: "max"
-        - name: "general_intent"
+          - solve mathematical equation with steps
+          - calculate statistics and probability values
+          - derive formulas and explain calculus
+          - linear algebra and numerical reasoning
+          aggregation_method: max
+        - name: general_intent
           threshold: 0.68
           candidates:
-            - "draft a friendly message or email"
-            - "summarize text in simple language"
-            - "general writing and communication help"
-            - "casual conversation and assistance"
-          aggregation_method: "max"
-      domains:
-        - name: "computer_science"
-          description: "Programming and computer science tasks"
+          - draft a friendly message or email
+          - summarize text in simple language
+          - general writing and communication help
+          - casual conversation and assistance
+          aggregation_method: max
+        domains:
+        - name: computer_science
+          description: Programming and computer science tasks
           mmlu_categories:
-            - "computer_security"
-            - "machine_learning"
-            - "high_school_computer_science"
-            - "college_computer_science"
-        - name: "mathematics"
-          description: "Math and quantitative problem solving"
+          - computer_security
+          - machine_learning
+          - high_school_computer_science
+          - college_computer_science
+        - name: mathematics
+          description: Math and quantitative problem solving
           mmlu_categories:
-            - "abstract_algebra"
-            - "college_mathematics"
-            - "elementary_mathematics"
-            - "high_school_mathematics"
-            - "high_school_statistics"
-      fact_check:
-        - name: "needs_verification"
-          description: "Queries likely requiring factual verification"
-      user_feedbacks:
-        - name: "correction_needed"
-          description: "User indicates prior answer was incorrect or insufficient"
-      preferences:
-        - name: "complex_reasoning"
-          description: "Preference for deeper reasoning responses"
-      language:
-        - name: "en"
-          description: "English-language requests"
-      context_rules:
-        - name: "low_token_count"
-          min_tokens: "0"
-          max_tokens: "1K"
-          description: "Short-context requests"
-        - name: "high_token_count"
-          min_tokens: "1K"
-          max_tokens: "128K"
-          description: "Long-context requests"
-      complexity:
-        - name: "code_complexity"
+          - abstract_algebra
+          - college_mathematics
+          - elementary_mathematics
+          - high_school_mathematics
+          - high_school_statistics
+        fact_check:
+        - name: needs_verification
+          description: Queries likely requiring factual verification
+        user_feedbacks:
+        - name: correction_needed
+          description: User indicates prior answer was incorrect or insufficient
+        preferences:
+        - name: complex_reasoning
+          description: Preference for deeper reasoning responses
+        language:
+        - name: en
+          description: English-language requests
+        context_rules:
+        - name: low_token_count
+          min_tokens: '0'
+          max_tokens: 1K
+          description: Short-context requests
+        - name: high_token_count
+          min_tokens: 1K
+          max_tokens: 128K
+          description: Long-context requests
+        complexity:
+        - name: code_complexity
           threshold: 0.1
-          description: "Coding difficulty estimate"
+          description: Coding difficulty estimate
           hard:
             candidates:
-              - "design distributed system"
-              - "optimize concurrent processing architecture"
-              - "debug race condition in multithreaded service"
+            - design distributed system
+            - optimize concurrent processing architecture
+            - debug race condition in multithreaded service
           easy:
             candidates:
-              - "print hello world"
-              - "read file and return content"
-              - "iterate list and sum values"
-      pii:
-        - name: "pii_detected"
+            - print hello world
+            - read file and return content
+            - iterate list and sum values
+        pii:
+        - name: pii_detected
           threshold: 0.25
           pii_types_allowed: []
-          description: "Detect requests containing sensitive PII content"
-      jailbreak:
-        - name: "jailbreak_standard"
+          description: Detect requests containing sensitive PII content
+        jailbreak:
+        - name: jailbreak_standard
           method: classifier
           threshold: 0.35
           include_history: true
-          description: "High-sensitivity jailbreak detection for demo and policy enforcement"
-
-    keyword_rules:
-      - name: "jailbreak_keywords"
-        operator: "OR"
-        keywords: ["ignore all previous instructions", "you are now dan", "reveal system prompt", "bypass safety", "developer mode without restrictions", "forget your system prompt"]
-        case_sensitive: false
-      - name: "pii_keywords"
-        operator: "OR"
-        keywords: ["my email is", "my phone is", "my name is", "ssn", "social security number", "credit card number", "date of birth", "passport number"]
-        case_sensitive: false
-      - name: "unsafe_content_keywords"
-        operator: "OR"
-        keywords: ["how to make a nuclear bomb", "build a bomb", "make explosives", "weapon design", "chemical weapon", "biological weapon", "dirty bomb"]
-        case_sensitive: false
-      - name: "urgent_keywords"
-        operator: "OR"
-        keywords: ["urgent", "critical", "immediate", "asap", "sev1", "p1"]
-        case_sensitive: false
-      - name: "security_keywords"
-        operator: "OR"
-        keywords: ["vulnerability", "auth bypass", "security issue", "exploit", "cve", "data breach", "authentication flaw"]
-        case_sensitive: false
-      - name: "code_review_keywords"
-        operator: "OR"
-        keywords: ["code review", "review this code", "pull request", "pr review", "debug this code"]
-        case_sensitive: false
-      - name: "code_keywords"
-        operator: "OR"
-        keywords: ["python", "function", "debug", "algorithm", "code review", "stack trace", "java", "golang", "javascript", "kubernetes yaml"]
-        case_sensitive: false
-      - name: "math_keywords"
-        operator: "OR"
-        keywords: ["equation", "derivative", "integral", "calculate", "algebra", "geometry", "statistics", "probability", "linear algebra"]
-        case_sensitive: false
-      - name: "smalltalk_keywords"
-        operator: "OR"
-        keywords: ["hello", "hi", "introduce yourself", "summarize this", "rephrase", "write an email", "draft a message"]
-        case_sensitive: false
-      - name: "feedback_keywords"
-        operator: "OR"
-        keywords: ["that is incorrect", "response was incorrect", "wrong answer", "incorrect answer", "you are wrong", "please correct", "retry with correct answer"]
-        case_sensitive: false
-
-    categories:
-      - name: "computer science"
-      - name: "math"
-      - name: "other"
-
-    decisions:
-      - name: "block_pii_keywords"
-        description: "Privacy Guardrail fallback: deterministic keyword-based PII block"
+          description: High-sensitivity jailbreak detection for demo and policy enforcement
+        keywords:
+        - name: jailbreak_keywords
+          operator: OR
+          keywords:
+          - ignore all previous instructions
+          - you are now dan
+          - reveal system prompt
+          - bypass safety
+          - developer mode without restrictions
+          - forget your system prompt
+          case_sensitive: false
+        - name: pii_keywords
+          operator: OR
+          keywords:
+          - my email is
+          - my phone is
+          - my name is
+          - ssn
+          - social security number
+          - credit card number
+          - date of birth
+          - passport number
+          case_sensitive: false
+        - name: unsafe_content_keywords
+          operator: OR
+          keywords:
+          - how to make a nuclear bomb
+          - build a bomb
+          - make explosives
+          - weapon design
+          - chemical weapon
+          - biological weapon
+          - dirty bomb
+          case_sensitive: false
+        - name: urgent_keywords
+          operator: OR
+          keywords:
+          - urgent
+          - critical
+          - immediate
+          - asap
+          - sev1
+          - p1
+          case_sensitive: false
+        - name: security_keywords
+          operator: OR
+          keywords:
+          - vulnerability
+          - auth bypass
+          - security issue
+          - exploit
+          - cve
+          - data breach
+          - authentication flaw
+          case_sensitive: false
+        - name: code_review_keywords
+          operator: OR
+          keywords:
+          - code review
+          - review this code
+          - pull request
+          - pr review
+          - debug this code
+          case_sensitive: false
+        - name: code_keywords
+          operator: OR
+          keywords:
+          - python
+          - function
+          - debug
+          - algorithm
+          - code review
+          - stack trace
+          - java
+          - golang
+          - javascript
+          - kubernetes yaml
+          case_sensitive: false
+        - name: math_keywords
+          operator: OR
+          keywords:
+          - equation
+          - derivative
+          - integral
+          - calculate
+          - algebra
+          - geometry
+          - statistics
+          - probability
+          - linear algebra
+          case_sensitive: false
+        - name: smalltalk_keywords
+          operator: OR
+          keywords:
+          - hello
+          - hi
+          - introduce yourself
+          - summarize this
+          - rephrase
+          - write an email
+          - draft a message
+          case_sensitive: false
+        - name: feedback_keywords
+          operator: OR
+          keywords:
+          - that is incorrect
+          - response was incorrect
+          - wrong answer
+          - incorrect answer
+          - you are wrong
+          - please correct
+          - retry with correct answer
+          case_sensitive: false
+      decisions:
+      - name: block_pii_keywords
+        description: 'Privacy Guardrail fallback: deterministic keyword-based PII block'
         priority: 1600
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "keyword"
-              name: "pii_keywords"
+          - type: keyword
+            name: pii_keywords
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
+        - model: phi-3-mini-chat
+          use_reasoning: false
         plugins:
-          - type: "fast_response"
-            configuration:
-              message: "Request blocked: Sensitive PII (Name/Email/Phone) detected. Please redact personal info before submitting."
-
-      - name: "block_pii_content"
-        description: "Privacy Guardrail: Block any request containing PII"
+        - type: fast_response
+          configuration:
+            message: 'Request blocked: Sensitive PII (Name/Email/Phone) detected. Please
+              redact personal info before submitting.'
+      - name: block_pii_content
+        description: 'Privacy Guardrail: Block any request containing PII'
         priority: 1500
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "pii"
-              name: "pii_detected"
+          - type: pii
+            name: pii_detected
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
+        - model: phi-3-mini-chat
+          use_reasoning: false
         plugins:
-          - type: "fast_response"
-            configuration:
-              message: "Request blocked: Sensitive PII (Name/Email) detected. Please redact personal info before submitting."
-
-      - name: "block_unsafe_content"
-        description: "Deterministic guardrail for explicit harmful-content requests"
+        - type: fast_response
+          configuration:
+            message: 'Request blocked: Sensitive PII (Name/Email) detected. Please redact
+              personal info before submitting.'
+      - name: block_unsafe_content
+        description: Deterministic guardrail for explicit harmful-content requests
         priority: 1200
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "keyword"
-              name: "unsafe_content_keywords"
+          - type: keyword
+            name: unsafe_content_keywords
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
+        - model: phi-3-mini-chat
+          use_reasoning: false
         plugins:
-          - type: "fast_response"
-            configuration:
-              message: "Request blocked by safety policy: harmful content detected."
-
-      - name: "critical_security_code"
-        description: "High-priority decision: urgent + security + coding intent -> qwen"
+        - type: fast_response
+          configuration:
+            message: 'Request blocked by safety policy: harmful content detected.'
+      - name: critical_security_code
+        description: 'High-priority decision: urgent + security + coding intent -> qwen'
         priority: 300
         rules:
-          operator: "AND"
+          operator: AND
           conditions:
-            - type: "keyword"
-              name: "urgent_keywords"
-            - type: "keyword"
-              name: "security_keywords"
-            - operator: "OR"
-              conditions:
-                - type: "keyword"
-                  name: "code_review_keywords"
-                - type: "keyword"
-                  name: "code_keywords"
+          - type: keyword
+            name: urgent_keywords
+          - type: keyword
+            name: security_keywords
+          - operator: OR
+            conditions:
+            - type: keyword
+              name: code_review_keywords
+            - type: keyword
+              name: code_keywords
         modelRefs:
-          - model: "qwen-25-7b"
-            use_reasoning: true
+        - model: qwen-25-7b
+          use_reasoning: true
         plugins:
-          - type: "semantic-cache"
-            configuration:
-              enabled: true
-              similarity_threshold: 0.92
-          - type: "pii"
-            configuration:
-              enabled: true
-              threshold: 0.25
-              pii_types_allowed: []
-
-      - name: "user_feedback_escalation"
-        description: "Escalate correction requests to stronger model with anti-hallucination guidance"
+        - type: response_cache
+          configuration:
+            enabled: true
+            similarity_threshold: 0.92
+        - type: pii
+          configuration:
+            enabled: true
+            threshold: 0.25
+            pii_types_allowed: []
+      - name: user_feedback_escalation
+        description: Escalate correction requests to stronger model with anti-hallucination
+          guidance
         priority: 220
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "user_feedback"
-              name: "correction_needed"
-            - type: "keyword"
-              name: "feedback_keywords"
+          - type: user_feedback
+            name: correction_needed
+          - type: keyword
+            name: feedback_keywords
         modelRefs:
-          - model: "qwen-25-7b"
-            use_reasoning: true
+        - model: qwen-25-7b
+          use_reasoning: true
         plugins:
-          - type: "semantic-cache"
-            configuration:
-              enabled: false
-          - type: "system_prompt"
-            configuration:
-              enabled: true
-              mode: "replace"
-              system_prompt: "You are in correction mode. Re-evaluate the prior answer carefully. If uncertain, explicitly say you are not sure instead of guessing. Keep the answer concise and factual."
-          - type: "pii"
-            configuration:
-              enabled: true
-              threshold: 0.25
-              pii_types_allowed: []
-
-      - name: "coding_hard_complexity"
-        description: "Complexity-aware scaling: hard coding tasks -> qwen"
+        - type: response_cache
+          configuration:
+            enabled: false
+        - type: system_prompt
+          configuration:
+            enabled: true
+            mode: replace
+            system_prompt: You are in correction mode. Re-evaluate the prior answer carefully.
+              If uncertain, explicitly say you are not sure instead of guessing. Keep
+              the answer concise and factual.
+        - type: pii
+          configuration:
+            enabled: true
+            threshold: 0.25
+            pii_types_allowed: []
+      - name: coding_hard_complexity
+        description: 'Complexity-aware scaling: hard coding tasks -> qwen'
         priority: 145
         rules:
-          operator: "AND"
+          operator: AND
           conditions:
-            - type: "complexity"
-              name: "code_complexity:hard"
+          - type: complexity
+            name: code_complexity:hard
         modelRefs:
-          - model: "qwen-25-7b"
-            use_reasoning: true
+        - model: qwen-25-7b
+          use_reasoning: true
         plugins:
-          - type: "semantic-cache"
-            configuration:
-              enabled: true
-              similarity_threshold: 0.93
-          - type: "pii"
-            configuration:
-              enabled: true
-              threshold: 0.25
-              pii_types_allowed: []
-
-      - name: "coding_easy_complexity"
-        description: "Complexity-aware scaling: easy coding tasks -> phi"
+        - type: response_cache
+          configuration:
+            enabled: true
+            similarity_threshold: 0.93
+        - type: pii
+          configuration:
+            enabled: true
+            threshold: 0.25
+            pii_types_allowed: []
+      - name: coding_easy_complexity
+        description: 'Complexity-aware scaling: easy coding tasks -> phi'
         priority: 140
         rules:
-          operator: "AND"
+          operator: AND
           conditions:
-            - type: "complexity"
-              name: "code_complexity:easy"
+          - type: complexity
+            name: code_complexity:easy
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
+        - model: phi-3-mini-chat
+          use_reasoning: false
         plugins:
-          - type: "semantic-cache"
-            configuration:
-              enabled: true
-              similarity_threshold: 0.90
-          - type: "pii"
-            configuration:
-              enabled: true
-              threshold: 0.25
-              pii_types_allowed: []
-
-      - name: "block_jailbreak_keywords"
-        description: "Deterministic jailbreak guardrail using keyword patterns"
+        - type: response_cache
+          configuration:
+            enabled: true
+            similarity_threshold: 0.9
+        - type: pii
+          configuration:
+            enabled: true
+            threshold: 0.25
+            pii_types_allowed: []
+      - name: block_jailbreak_keywords
+        description: Deterministic jailbreak guardrail using keyword patterns
         priority: 1100
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "keyword"
-              name: "jailbreak_keywords"
+          - type: keyword
+            name: jailbreak_keywords
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
+        - model: phi-3-mini-chat
+          use_reasoning: false
         plugins:
-          - type: "fast_response"
-            configuration:
-              message: "Request blocked by safety policy: jailbreak pattern detected."
-
-      - name: "block_jailbreak"
-        description: "Block requests detected as jailbreak attempts"
+        - type: fast_response
+          configuration:
+            message: 'Request blocked by safety policy: jailbreak pattern detected.'
+      - name: block_jailbreak
+        description: Block requests detected as jailbreak attempts
         priority: 1000
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "jailbreak"
-              name: "jailbreak_standard"
+          - type: jailbreak
+            name: jailbreak_standard
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
+        - model: phi-3-mini-chat
+          use_reasoning: false
         plugins:
-          - type: "fast_response"
-            configuration:
-              message: "Request blocked by safety policy: potential jailbreak attempt detected."
-
-      - name: "coding"
-        description: "Signal-decision route: coding keyword or domain -> qwen"
+        - type: fast_response
+          configuration:
+            message: 'Request blocked by safety policy: potential jailbreak attempt detected.'
+      - name: coding
+        description: 'Signal-decision route: coding keyword or domain -> qwen'
         priority: 130
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "embedding"
-              name: "coding_intent"
-            - type: "keyword"
-              name: "code_keywords"
-            - type: "domain"
-              name: "computer_science"
+          - type: embedding
+            name: coding_intent
+          - type: keyword
+            name: code_keywords
+          - type: domain
+            name: computer_science
         modelRefs:
-          - model: "qwen-25-7b"
-            use_reasoning: true
+        - model: qwen-25-7b
+          use_reasoning: true
         plugins:
-          - type: "semantic-cache"
-            configuration:
-              enabled: true
-              similarity_threshold: 0.92
-          - type: "pii"
-            configuration:
-              enabled: true
-              threshold: 0.25
-              pii_types_allowed: []
-
-      - name: "math"
-        description: "Signal-decision route: math keyword or domain -> qwen"
+        - type: response_cache
+          configuration:
+            enabled: true
+            similarity_threshold: 0.92
+        - type: pii
+          configuration:
+            enabled: true
+            threshold: 0.25
+            pii_types_allowed: []
+      - name: math
+        description: 'Signal-decision route: math keyword or domain -> qwen'
         priority: 120
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "embedding"
-              name: "math_intent"
-            - type: "keyword"
-              name: "math_keywords"
-            - type: "domain"
-              name: "mathematics"
+          - type: embedding
+            name: math_intent
+          - type: keyword
+            name: math_keywords
+          - type: domain
+            name: mathematics
         modelRefs:
-          - model: "qwen-25-7b"
-            use_reasoning: true
+        - model: qwen-25-7b
+          use_reasoning: true
         plugins:
-          - type: "semantic-cache"
-            configuration:
-              enabled: true
-              similarity_threshold: 0.92
-          - type: "pii"
-            configuration:
-              enabled: true
-              threshold: 0.25
-              pii_types_allowed: []
-
-      - name: "general"
-        description: "Signal-decision route: general chat keyword -> phi"
+        - type: response_cache
+          configuration:
+            enabled: true
+            similarity_threshold: 0.92
+        - type: pii
+          configuration:
+            enabled: true
+            threshold: 0.25
+            pii_types_allowed: []
+      - name: general
+        description: 'Signal-decision route: general chat keyword -> phi'
         priority: 90
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "embedding"
-              name: "general_intent"
-            - type: "keyword"
-              name: "smalltalk_keywords"
+          - type: embedding
+            name: general_intent
+          - type: keyword
+            name: smalltalk_keywords
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
+        - model: phi-3-mini-chat
+          use_reasoning: false
         plugins:
-          - type: "pii"
-            configuration:
-              enabled: true
-              threshold: 0.25
-              pii_types_allowed: []
-
-      - name: "general_domain"
-        description: "Classifier route for non-technical prompts -> phi"
+        - type: pii
+          configuration:
+            enabled: true
+            threshold: 0.25
+            pii_types_allowed: []
+      - name: general_domain
+        description: Classifier route for non-technical prompts -> phi
         priority: 50
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "domain"
-              name: "other"
+          - type: domain
+            name: other
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
+        - model: phi-3-mini-chat
+          use_reasoning: false
         plugins:
-          - type: "pii"
-            configuration:
-              enabled: true
-              threshold: 0.25
-              pii_types_allowed: []
-
-      - name: "extended_signals_enablement"
-        description: "Low-priority decision to activate additional signal families"
+        - type: pii
+          configuration:
+            enabled: true
+            threshold: 0.25
+            pii_types_allowed: []
+      - name: extended_signals_enablement
+        description: Low-priority decision to activate additional signal families
         priority: 10
         rules:
-          operator: "OR"
+          operator: OR
           conditions:
-            - type: "fact_check"
-              name: "needs_verification"
-            - type: "user_feedback"
-              name: "correction_needed"
-            - type: "preference"
-              name: "complex_reasoning"
-            - type: "language"
-              name: "en"
-            - type: "context"
-              name: "low_token_count"
-            - type: "complexity"
-              name: "code_complexity:hard"
-            - type: "modality"
-              name: "autoregressive"
-            - type: "pii"
-              name: "pii_detected"
-            - type: "authz"
-              name: "admin"
+          - type: fact_check
+            name: needs_verification
+          - type: user_feedback
+            name: correction_needed
+          - type: preference
+            name: complex_reasoning
+          - type: language
+            name: en
+          - type: context
+            name: low_token_count
+          - type: complexity
+            name: code_complexity:hard
+          - type: modality
+            name: autoregressive
+          - type: pii
+            name: pii_detected
+          - type: authz
+            name: admin
         modelRefs:
-          - model: "phi-3-mini-chat"
-            use_reasoning: false
-
-    default_model: "phi-3-mini-chat"
-
-    reasoning_families:
-      deepseek:
-        type: "chat_template_kwargs"
-        parameter: "thinking"
-      qwen3:
-        type: "chat_template_kwargs"
-        parameter: "enable_thinking"
-      gpt-oss:
-        type: "reasoning_effort"
-        parameter: "reasoning_effort"
-      gpt:
-        type: "reasoning_effort"
-        parameter: "reasoning_effort"
-
-    default_reasoning_effort: high
+        - model: phi-3-mini-chat
+          use_reasoning: false
+    global:
+      model_catalog:
+        embeddings:
+          semantic:
+            use_cpu: true
+            embedding_config:
+              min_score_threshold: 0.6
+        modules:
+          prompt_guard:
+            enabled: true
+            model_id: models/Vela-1.0-Encoder-307M-Guard
+            threshold: 0.7
+            use_cpu: true
+            model_ref: prompt_guard
+          classifier:
+            domain:
+              model_id: models/Vela-1.0-Encoder-307M-Domain
+              threshold: 0.1
+              use_cpu: true
+              model_ref: domain_classifier
+            pii:
+              model_id: models/Vela-1.0-Encoder-307M-PII
+              threshold: 0.25
+              use_cpu: true
+              model_ref: pii_classifier
+      router: {}
+      stores:
+        response_cache:
+          enabled: true
+          backend_type: memory
+          similarity_threshold: 0.85
+          max_entries: 1000
+          ttl_seconds: 3600
+          eviction_policy: fifo
+          embedding_model: mmbert
+    entrypoints:
+    - model_names:
+      - auto
+      recipe: default
