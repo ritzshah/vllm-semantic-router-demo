@@ -27,26 +27,38 @@ status=200 total_ms=2841 upstream_ms=2790 cluster=vllm_dynamic_cluster vsr=172.3
 
 ## `503 no healthy upstream`
 
-The single most common failure, and almost always the backend addresses.
+Almost always the Envoy routing contract, not the backends.
+
+Check the access log first — it prints the header Envoy routes on:
 
 ```bash
-# What does the router think the backends are?
-oc get cm semantic-router-config -n models -o jsonpath='{.data.config\.yaml}' \
-  | grep -A2 'vllm_endpoints' -A8
+oc logs -n models deploy/semantic-router -c envoy-proxy --tail=20 | grep chat
+# status=503 ... cluster=... host=- selected=- ...
+```
 
-# What are they actually?
+`selected=-` means the router never set `x-selected-model`, so no model route
+matched. The usual cause is a config carrying the **pre-v0.3 Envoy shape**: a
+single `ORIGINAL_DST` cluster fed by `x-vsr-destination-endpoint`. That header
+does not exist in v0.3 — see
+[architecture](architecture.md#how-envoy-learns-where-to-send-a-request).
+
+This failure is deceptive, so be clear about what it is telling you:
+**guardrail blocks and cache hits keep working**, because the router answers
+those itself and never reaches a cluster. Only requests that need a model
+break. Test with a prompt that must reach one before concluding the router is
+healthy.
+
+If `selected=` names a model but you still get 503, the per-model cluster is
+wrong or its DNS name does not resolve:
+
+```bash
+# Does the name in the Envoy cluster actually exist?
 oc get svc -n models | grep stable
+oc get endpoints -n models | grep stable     # must be non-empty
 ```
 
-If the config still contains `__QWEN_ENDPOINT_IP__`, the manifests were applied
-directly rather than through the wiring script:
-
-```bash
-./scripts/wire-endpoints.sh
-```
-
-If the IPs are real but stale — a model was redeployed and its stable Service
-recreated — the same command fixes it.
+An empty endpoint list means the stable Service's selector does not match the
+predictor pods — see [above](#stable-service-has-no-endpoints).
 
 **Do not substitute a DNS name for the IP.** Envoy's `ORIGINAL_DST` cluster
 dials the header value literally and performs no resolution; a hostname there
@@ -55,7 +67,7 @@ produces exactly this error. See
 
 ### Stable Service has no endpoints
 
-`wire-endpoints.sh` warns about this and falls back to the KServe-generated
+`apply-router.sh` warns about this and falls back to the KServe-generated
 predictor Service. The cause is a label mismatch: the stable Services select
 `app: isvc.<name>-predictor`, which some KServe versions do not set.
 
@@ -96,7 +108,7 @@ Then adjust in [`03-configmap-router.yaml`](../deploy/router/03-configmap-router
 Apply and restart:
 
 ```bash
-./scripts/wire-endpoints.sh     # re-applies and restarts only if the config changed
+./scripts/apply-router.sh     # re-applies and restarts only if the config changed
 ./scripts/smoke-test.sh
 ```
 
@@ -194,10 +206,11 @@ print(yaml.safe_dump(migrate_config_data(yaml.safe_load(sys.stdin.read()), Migra
 oc delete pod vsr-migrate -n models
 ```
 
-The migration emits **literal endpoint IPs**. Swap them back for
-`__QWEN_ENDPOINT_IP__` / `__PHI_ENDPOINT_IP__` before committing, or
-`wire-endpoints.sh` has nothing to substitute and the config will be wrong on
-the next cluster.
+The migration emits **literal endpoint IPs** in
+`providers.models[].backend_refs[].endpoint`. Replace them with Service DNS
+names before committing — Envoy's per-model clusters are `STRICT_DNS` and
+resolve the names themselves, so a committed ClusterIP is both unnecessary and
+wrong on the next cluster.
 
 ### PVC `Pending`
 
@@ -317,7 +330,7 @@ curl -ski -X OPTIONS \
 ```
 
 You should see `access-control-allow-origin`. If not, the router pod is running
-an older Envoy ConfigMap — `./scripts/wire-endpoints.sh` to re-apply.
+an older Envoy ConfigMap — `./scripts/apply-router.sh` to re-apply.
 
 ### Model name shows "from body"
 

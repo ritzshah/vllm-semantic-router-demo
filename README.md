@@ -75,9 +75,9 @@ oc login --token=<token> --server=<api-url>
 ./scripts/deploy.sh
 ```
 
-That is the whole thing. It deploys the models, waits for them, resolves their
-ClusterIPs into the router config, deploys the router, deploys the console, and
-prints the two URLs.
+That is the whole thing. It deploys the models, waits for them, validates and
+applies the router config, deploys the router, deploys the console, and prints
+the two URLs.
 
 Budget **45–60 minutes for the first run** — almost all of it is pulling
 Qwen-2.5-7B from Hugging Face. Subsequent runs take a couple of minutes.
@@ -87,7 +87,7 @@ Re-running is safe. Useful variants:
 ```bash
 ./scripts/deploy.sh --skip-models   # models already up; just router + console
 ./scripts/deploy.sh --ui-only       # after editing a use case
-./scripts/wire-endpoints.sh         # after redeploying a model, repoint the router
+./scripts/apply-router.sh         # after redeploying a model, repoint the router
 NS=my-demo ./scripts/deploy.sh      # different namespace
 ```
 
@@ -187,7 +187,8 @@ deploy/
   demo-ui/     The console — nginx Deployment plus the UI source in ui/
 scripts/
   deploy.sh           stand up everything
-  wire-endpoints.sh   resolve backend ClusterIPs into the router config
+  apply-router.sh     validate + apply the router, restart only if changed
+  validate-config.sh  check the router config offline before deploying
   smoke-test.sh       run all 15 use cases, report expected vs actual
   port-forward.sh     serve the console on localhost
   undeploy.sh         tear down
@@ -235,21 +236,27 @@ $EDITOR deploy/demo-ui/ui/usecases.js
 Routing behaviour lives in
 [`deploy/router/03-configmap-router.yaml`](deploy/router/03-configmap-router.yaml)
 — keyword rules, embedding signals, thresholds and the decision list with its
-priorities. Change it and run `./scripts/wire-endpoints.sh`, which re-applies and
+priorities. Change it and run `./scripts/apply-router.sh`, which re-applies and
 restarts the router only if the config actually changed.
 
 ---
 
 ## Two things worth knowing before you read the manifests
 
-**The router config contains IP placeholders, on purpose.** Envoy's
-`ORIGINAL_DST` cluster dials whatever address the router puts in the
-`x-vsr-destination-endpoint` header, and it does not resolve DNS — a Service
-hostname there produces `503 no healthy upstream`. So the config needs literal
-ClusterIPs, which are cluster-specific, which is why Git carries
-`__QWEN_ENDPOINT_IP__` and `scripts/wire-endpoints.sh` fills it in at deploy
-time. The stable `*-predictor-stable` Services exist so those IPs survive
-InferenceService redeploys.
+**The router picks a model; Envoy picks the address.** The router sets an
+`x-selected-model` request header carrying the chosen model's *name*, and Envoy
+has one `STRICT_DNS` cluster per model, selected by a route matching that
+header. Backends are therefore ordinary Service DNS names: nothing is
+substituted at deploy time, and redeploying a model needs no re-wiring. The
+stable `*-predictor-stable` Services exist because KServe recreates its
+generated predictor Services on every revision; these do not.
+
+If you are porting an older config, note this replaced a single `ORIGINAL_DST`
+cluster fed by an `x-vsr-destination-endpoint` header holding a literal
+`IP:port`. That header no longer exists, and keeping the old shape fails
+misleadingly: guardrail blocks and cache hits still work, because the router
+answers those itself and never reaches a cluster, so only requests that need a
+model return `503 no healthy upstream`.
 
 **The demo console is same-origin by design.** Its nginx proxies `/v1` to the
 router inside the cluster, so the browser never makes a cross-origin request

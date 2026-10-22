@@ -1,9 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: models
-# NOTE: 03-configmap-router.yaml ships with __QWEN_ENDPOINT_IP__ /
-# __PHI_ENDPOINT_IP__ placeholders. Run scripts/wire-endpoints.sh before
-# applying this overlay directly, or just use scripts/deploy.sh.
+# `oc apply -k` works directly here — backends are Service DNS names and
+# nothing needs substituting. Prefer scripts/apply-router.sh though: it
+# validates the config first and restarts the router only when the content
+# actually changed (the ConfigMap name is stable, so nothing else would).
 resources:
   - 01-serviceaccount.yaml
   - 02-pvcs.yaml

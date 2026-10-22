@@ -1,13 +1,11 @@
 # Stable ClusterIP Services in front of the KServe predictors.
 #
-# Why these exist: Envoy's ORIGINAL_DST cluster in the router resolves the
-# x-vsr-upstream-host header as a literal IP:port — it performs no DNS
-# lookup. The router config therefore needs an IP address per backend, and these
-# Services give us an IP that survives InferenceService redeploys (the predictor
-# Services that KServe generates are recreated on every revision).
+# Why these exist: KServe recreates its generated predictor Services on every
+# revision. These do not change, so the Envoy clusters and the router config
+# can name them once and never be re-pointed after a model redeploy.
 #
-# scripts/wire-endpoints.sh reads the ClusterIPs of these two Services and
-# substitutes them into the router ConfigMap at deploy time.
+# Envoy's per-model clusters are STRICT_DNS and resolve these names directly,
+# so no ClusterIP ever has to be written into Git.
 apiVersion: v1
 kind: Service
 metadata:

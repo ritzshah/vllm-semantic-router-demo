@@ -21,8 +21,9 @@ processor* reached over gRPC on localhost.
                                    │                              ┌──────────────────┐
                                    │                              │ semantic-router  │
                                    │                              │                  │
-                                   │                              │ MiniLM embed     │
-                                   │                              │ ModernBERT ×3    │
+                                   │                              │ Vela embedding   │
+                                   │                              │ Vela Guard/PII/  │
+                                   │                              │   Domain         │
                                    │                              │ keyword rules    │
                                    │                              │ decision list    │
                                    │                              │ semantic cache   │
@@ -31,13 +32,14 @@ processor* reached over gRPC on localhost.
                                    │      (a) an immediate response  → guardrail block
                                    │                                   or cache hit
                                    │      (b) a mutated request      → sets header
-                                   │          x-vsr-upstream-host: <IP>:8080
+                                   │          x-selected-model: qwen-25-7b
                                    │
-                                   │ 3. router filter
-                                   ▼
-                            vllm_dynamic_cluster  (type: ORIGINAL_DST)
-                                   │  dials the address from that header
+                                   │ 3. router filter — route matches that header
                        ┌───────────┴───────────┐
+                       ▼                       ▼
+                  qwen_cluster            phi_cluster
+                  (STRICT_DNS)            (STRICT_DNS)
+                       │                       │
                        ▼                       ▼
             qwen-25-7b-predictor     phi-3-mini-chat-predictor
             (vLLM, 1× GPU)           (vLLM, 1× GPU)
@@ -48,34 +50,54 @@ are both answered by the router itself through the `fast_response` path, which
 is why blocked requests come back in tens of milliseconds while a real
 generation takes seconds. That contrast is the most legible thing on stage.
 
-## Why ORIGINAL_DST, and why the IP placeholders
+## How Envoy learns where to send a request
 
-`ORIGINAL_DST` with `use_http_header` lets a single Envoy cluster forward to an
-arbitrary backend chosen at request time, which is exactly what a router needs:
-adding a third model becomes a config change, not a new Envoy cluster.
+The router does not hand Envoy an address. It sets **`x-selected-model`** to the
+chosen model's logical *name*, and Envoy owns one named cluster per model, with
+a route matching on that header:
 
-The cost is that Envoy treats the header value as a literal address and does no
-DNS resolution. Putting `qwen-25-7b-predictor.models.svc.cluster.local:8080` in
-the router config produces `503 no healthy upstream`. The config therefore needs
-ClusterIPs.
+```yaml
+- match:
+    prefix: "/"
+    headers:
+    - name: x-selected-model
+      string_match: { exact: "qwen-25-7b" }
+  route:
+    cluster: qwen_cluster
+```
 
-ClusterIPs are cluster-specific, so they cannot live in Git. Two things resolve
-that:
+The virtual host strips any `x-selected-model` the client supplied, so the
+header can only have come from the router.
 
-1. **Stable Services.** `qwen-25-7b-predictor-stable` and
-   `phi-3-mini-chat-predictor-stable` select the predictor pods directly
-   (`app: isvc.<name>-predictor`). KServe recreates its own predictor Services
-   on revision changes; these do not, so their IPs are stable for the lifetime
-   of the namespace.
-2. **`scripts/wire-endpoints.sh`.** Reads those two ClusterIPs and substitutes
-   them for the `__QWEN_ENDPOINT_IP__` / `__PHI_ENDPOINT_IP__` placeholders as
-   the manifests are applied. It restarts the router only when the resulting
-   config differs from what is live.
+This layout mirrors the template the project ships at
+`/app/cli/templates/envoy.template.yaml` inside the extproc image — worth
+reading if you add a backend, since it is the authoritative shape.
 
-The alternative — a `STRICT_DNS` cluster per backend plus header-based route
-matching — removes the IP problem but reintroduces per-backend Envoy config,
-which is the thing `ORIGINAL_DST` was chosen to avoid. For a demo with two
-backends, the wiring script is the smaller cost.
+Three consequences:
+
+- **Backends are DNS names.** The clusters are `STRICT_DNS`, so they take
+  `qwen-25-7b-predictor-stable.models.svc.cluster.local` and re-resolve on
+  their own. No ClusterIP is ever written into Git, and a model redeploy needs
+  no re-wiring.
+- **The stable Services still earn their place**, just for a different reason:
+  KServe recreates its generated predictor Services on every revision, so the
+  DNS name has to be one that does not move.
+- **Adding a model** is a route plus a cluster here, and a `providers.models`
+  entry in the router config. The two must agree on the name.
+
+### If you are porting an older config
+
+This replaced a single `ORIGINAL_DST` cluster whose address came from an
+`x-vsr-destination-endpoint` header holding a literal `IP:port`. That header
+does not exist in v0.3.
+
+Keeping the old shape fails in a way that wastes an afternoon: **guardrail
+blocks and cache hits keep working**, because the router answers those itself
+and never reaches a cluster. Only requests that actually need a model fail,
+with `503 no healthy upstream` — so the half of the demo you check first looks
+perfect. The tell is in the Envoy access log, where the header field prints
+empty.
+
 
 ## How a decision is made
 

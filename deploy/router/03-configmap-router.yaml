@@ -23,10 +23,9 @@
 # The `semantic-cache` plugin alias is now `response_cache`; the old name still
 # works but logs a deprecation warning on every decision that uses it.
 #
-# IMPORTANT: backend_refs carry the placeholders __QWEN_ENDPOINT_IP__ and
-# __PHI_ENDPOINT_IP__. Run scripts/wire-endpoints.sh (or scripts/deploy.sh,
-# which calls it) to substitute the live ClusterIPs before applying. Envoy's
-# ORIGINAL_DST cluster resolves no DNS, so these must be literal IPs.
+# Backends are addressed by Service DNS name. Envoy's per-model clusters are
+# STRICT_DNS and resolve these themselves, so nothing has to be substituted at
+# deploy time and a model redeploy needs no re-wiring.
 #
 # Decision priorities, highest first:
 #   1600 block_pii_keywords          guardrail  (deterministic)
@@ -65,7 +64,7 @@ data:
       - name: qwen-25-7b
         backend_refs:
         - name: qwen-endpoint
-          endpoint: __QWEN_ENDPOINT_IP__:8080
+          endpoint: qwen-25-7b-predictor-stable.models.svc.cluster.local:8080
           weight: 1
           provider: vllm
         reasoning:
@@ -74,7 +73,7 @@ data:
       - name: phi-3-mini-chat
         backend_refs:
         - name: phi-endpoint
-          endpoint: __PHI_ENDPOINT_IP__:8080
+          endpoint: phi-3-mini-chat-predictor-stable.models.svc.cluster.local:8080
           weight: 1
           provider: vllm
     routing:

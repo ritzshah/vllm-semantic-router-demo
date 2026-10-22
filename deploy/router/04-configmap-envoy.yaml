@@ -2,20 +2,35 @@
 #
 # Request path for a chat completion:
 #   client -> listener :8801
-#          -> cors filter          (short-circuits OPTIONS preflight)
-#          -> ext_proc filter      (gRPC to the router on 127.0.0.1:50051)
-#               router classifies the prompt, picks a model, and sets the
-#               x-vsr-upstream-host request header to "IP:port"
-#          -> router filter        -> vllm_dynamic_cluster (ORIGINAL_DST)
-#               Envoy dials the address in that header directly
+#          -> cors filter      (short-circuits OPTIONS preflight)
+#          -> ext_proc filter  (gRPC to the router on 127.0.0.1:50051)
+#               the router classifies the prompt, picks a model, and sets the
+#               x-selected-model request header to that model's name
+#          -> router filter    -> the named cluster whose route matches that header
 #
-# ORIGINAL_DST does not perform DNS resolution, which is why the router config
-# must carry backend ClusterIPs rather than Service hostnames.
+# HOW v0.3 PICKS A BACKEND — this changed, and the old shape fails silently.
 #
-# The CORS policy is what lets the demo console run from somewhere other than
-# this Route (a laptop file:// page, GitHub Pages, another cluster). When the
-# console is served by the in-cluster demo-ui pod it is same-origin and CORS is
-# not consulted at all.
+# Earlier builds used a single ORIGINAL_DST cluster and had the router write an
+# "IP:port" into x-vsr-destination-endpoint. That header no longer exists; v0.3
+# instead sets x-selected-model to the *logical model name* and expects Envoy to
+# own one named cluster per model. This layout mirrors the template the project
+# ships at /app/cli/templates/envoy.template.yaml in the extproc image.
+#
+# The failure mode if you keep the old shape is nasty: guardrail blocks and
+# cache hits keep working, because the router answers those itself and never
+# reaches a cluster. Only requests that need a model fail, with
+# "503 no healthy upstream". Half the demo looks perfect.
+#
+# Two consequences of named clusters, both good:
+#   - They resolve DNS (STRICT_DNS), so backends are Service names rather than
+#     ClusterIPs. No IP substitution at deploy time, and nothing to re-wire
+#     when a model is redeployed.
+#   - Adding a third model is a route + cluster pair here and a providers entry
+#     in the router config. No Envoy restart semantics to think about.
+#
+# Route order matters — Envoy takes the first match. The router's own API paths
+# are listed before the model routes, with ext_proc disabled so a health probe
+# or a metrics scrape never triggers a classification pass.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -35,23 +50,35 @@ data:
           socket_address:
             address: 0.0.0.0
             port_value: 8801
+        perConnectionBufferLimitBytes: 524288000
         filter_chains:
         - filters:
           - name: envoy.filters.network.http_connection_manager
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: ingress_http
+              codec_type: AUTO
+              stream_idle_timeout: 300s
               access_log:
               - name: envoy.access_loggers.stdout
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
                   log_format:
-                    text_format: "status=%RESPONSE_CODE% total_ms=%DURATION% upstream_ms=%RESP(x-envoy-upstream-service-time)% cluster=%UPSTREAM_CLUSTER% vsr=%REQ(x-vsr-upstream-host)% model=%RESP(x-vsr-selected-model)% decision=%RESP(x-vsr-selected-decision)% cache=%RESP(x-vsr-cache-hit)% method=%REQ(:METHOD)% path=%REQ(:PATH)%\n"
+                    text_format: "status=%RESPONSE_CODE% total_ms=%DURATION% upstream_ms=%RESP(x-envoy-upstream-service-time)% cluster=%UPSTREAM_CLUSTER% host=%UPSTREAM_HOST% selected=%REQ(x-selected-model)% model=%RESP(x-vsr-selected-model)% decision=%RESP(x-vsr-selected-decision)% cache=%RESP(x-vsr-cache-hit)% method=%REQ(:METHOD)% path=%REQ(:PATH)%\n"
               route_config:
                 name: local_route
                 virtual_hosts:
                 - name: local_service
                   domains: ["*"]
+                  # Internal headers a client must never be able to supply.
+                  request_headers_to_remove:
+                  - "x-selected-model"
+                  - "x-vsr-looper-request"
+                  - "x-vsr-looper-secret"
+                  - "x-vsr-looper-decision"
+                  - "x-vsr-looper-iteration"
+                  - "x-authz-user-id"
+                  - "x-authz-user-groups"
                   typed_per_filter_config:
                     envoy.filters.http.cors:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.CorsPolicy
@@ -60,13 +87,10 @@ data:
                           regex: ".*"
                       allow_methods: "GET, POST, OPTIONS"
                       allow_headers: "content-type,authorization,accept,x-request-id"
-                      expose_headers: "x-vsr-selected-model,x-vsr-selected-category,x-vsr-selected-decision,x-vsr-selected-reasoning,x-vsr-selected-algorithm,x-vsr-selected-confidence,x-vsr-cache-hit,x-vsr-routing-latency-ms,x-vsr-upstream-host,x-envoy-upstream-service-time"
+                      expose_headers: "x-vsr-selected-model,x-vsr-selected-category,x-vsr-selected-decision,x-vsr-selected-reasoning,x-vsr-selected-algorithm,x-vsr-selected-confidence,x-vsr-cache-hit,x-vsr-routing-latency-ms,x-envoy-upstream-service-time"
                       max_age: "86400"
                   routes:
-                  # Classification API, health and model list are served by the
-                  # router's own HTTP listener. ext_proc is disabled on these so
-                  # a metrics scrape or a health probe never triggers a
-                  # classification pass.
+                  # --- the router's own API, ext_proc disabled ---------------
                   - match:
                       path: "/v1/models"
                     route:
@@ -103,13 +127,41 @@ data:
                       envoy.filters.http.ext_proc:
                         "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute
                         disabled: true
-                  # Everything else (notably /v1/chat/completions) goes through
-                  # ext_proc and then to whichever backend the router selected.
+
+                  # --- one route per model, keyed on x-selected-model --------
+                  # ext_proc sets this header; the virtual host strips any copy
+                  # the client sent, so it can only come from the router.
+                  - match:
+                      prefix: "/"
+                      headers:
+                      - name: x-selected-model
+                        string_match:
+                          exact: "qwen-25-7b"
+                    route:
+                      cluster: qwen_cluster
+                      timeout: 300s
+                      auto_host_rewrite: true
+                  - match:
+                      prefix: "/"
+                      headers:
+                      - name: x-selected-model
+                        string_match:
+                          exact: "phi-3-mini-chat"
+                    route:
+                      cluster: phi_cluster
+                      timeout: 300s
+                      auto_host_rewrite: true
+
+                  # --- default ----------------------------------------------
+                  # No x-selected-model: fall through to the small model, which
+                  # matches default_model in the router config. An unrecognised
+                  # request costs the cheap model, never the expensive one.
                   - match:
                       prefix: "/"
                     route:
-                      cluster: vllm_dynamic_cluster
+                      cluster: phi_cluster
                       timeout: 300s
+                      auto_host_rewrite: true
               http_filters:
               - name: envoy.filters.http.cors
                 typed_config:
@@ -128,8 +180,13 @@ data:
                     response_body_mode: "BUFFERED"
                     request_trailer_mode: "SKIP"
                     response_trailer_mode: "SKIP"
-                  failure_mode_allow: true
                   message_timeout: 300s
+                  # The router passes a decision's reliability block to Envoy's
+                  # router as these per-request headers; it may set no other
+                  # x-envoy-* header.
+                  mutation_rules:
+                    allow_expression:
+                      regex: "^x-envoy-(upstream-rq-timeout-ms|upstream-rq-per-try-timeout-ms|max-retries|retry-on|retriable-status-codes)$"
               - name: envoy.filters.http.router
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -182,20 +239,41 @@ data:
                     address: 127.0.0.1
                     port_value: 9190
 
-      - name: vllm_dynamic_cluster
-        connect_timeout: 300s
-        type: ORIGINAL_DST
-        lb_policy: CLUSTER_PROVIDED
-        original_dst_lb_config:
-          use_http_header: true
-          # v0.3 renamed this header. It was x-vsr-destination-endpoint, which
-          # no longer appears in the router binary at all — so Envoy saw no
-          # address, ORIGINAL_DST had nothing to dial, and every request that
-          # needed a model came back "503 no healthy upstream" while guardrail
-          # blocks (answered by the router itself) kept working fine.
-          # The access log below prints this header: `vsr=-` means the router
-          # is not setting it and the name here is wrong again.
-          http_header_name: "x-vsr-upstream-host"
+      # --- backends -------------------------------------------------------
+      # STRICT_DNS, so these are Service names and not ClusterIPs. Envoy
+      # re-resolves on its own, which means a model redeploy needs no change
+      # here and no re-wiring of the router config.
+      - name: qwen_cluster
+        connect_timeout: 10s
+        type: STRICT_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: qwen_cluster
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: qwen-25-7b-predictor-stable.models.svc.cluster.local
+                    port_value: 8080
+                hostname: "qwen-25-7b-predictor-stable.models.svc.cluster.local"
+
+      - name: phi_cluster
+        connect_timeout: 10s
+        type: STRICT_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: phi_cluster
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: phi-3-mini-chat-predictor-stable.models.svc.cluster.local
+                    port_value: 8080
+                hostname: "phi-3-mini-chat-predictor-stable.models.svc.cluster.local"
 
     admin:
       address:

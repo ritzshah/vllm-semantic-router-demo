@@ -264,4 +264,4 @@ claims a cache hit it cannot prove would be worse than no card at all.
 If the case needs a routing decision that does not exist yet, add it to
 `decisions` in the router ConfigMap, pick a priority that places it correctly in
 the ladder in [architecture.md](architecture.md#how-a-decision-is-made), then
-`./scripts/wire-endpoints.sh` to apply and restart.
+`./scripts/apply-router.sh` to apply and restart.

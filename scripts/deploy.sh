@@ -83,10 +83,10 @@ fi
 # ----------------------------------------------------------------- router --
 
 step "Deploying the semantic router"
-# wire-endpoints.sh resolves the backend ClusterIPs, substitutes them for the
+# apply-router.sh resolves the backend ClusterIPs, substitutes them for the
 # placeholders in the router ConfigMap, applies the whole router overlay, and
 # restarts the router only if the resulting config differs from what is live.
-"$REPO_ROOT/scripts/wire-endpoints.sh"
+"$REPO_ROOT/scripts/apply-router.sh"
 
 step "Waiting for the router to roll out"
 info "Cold start downloads ~4 GB of ModernBERT classifiers onto the PVC, then"

@@ -15,7 +15,7 @@
 #   - signal families using a legacy name (keyword_rules, context_rules, ...)
 #   - decisions referencing a signal that was never declared
 #   - unsubstituted __*_ENDPOINT_IP__ placeholders (a warning, not an error —
-#     wire-endpoints.sh fills those in at deploy time)
+#     apply-router.sh fills those in at deploy time)
 #
 # Requires ruby, which ships with macOS and most Linux distributions.
 
@@ -65,7 +65,7 @@ raw = doc.is_a?(Hash) && doc['data'] ? doc['data']['config.yaml'] : File.read(pa
 abort "could not find data['config.yaml'] in #{path}" if raw.nil?
 
 placeholders = raw.scan(/__\w+_ENDPOINT_IP__/).uniq
-warnings << "unsubstituted placeholders: #{placeholders.join(', ')} (wire-endpoints.sh fills these in)" if placeholders.any?
+warnings << "unsubstituted placeholders: #{placeholders.join(', ')} (apply-router.sh fills these in)" if placeholders.any?
 
 cfg = begin
   YAML.safe_load(raw)

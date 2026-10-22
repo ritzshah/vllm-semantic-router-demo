@@ -39,9 +39,9 @@ step "Removing the demo console"
 oc delete -k "$REPO_ROOT/deploy/demo-ui" -n "$NS" --ignore-not-found
 
 step "Removing the router"
-# --print renders with the IP placeholders substituted; delete does not care
-# about the values, only the object identities.
-"$REPO_ROOT/scripts/wire-endpoints.sh" --print 2>/dev/null \
+# --print renders the overlay without applying it; delete only needs the
+# object identities.
+"$REPO_ROOT/scripts/apply-router.sh" --print 2>/dev/null \
   | oc delete -n "$NS" -f - --ignore-not-found \
   || oc delete -n "$NS" deployment/semantic-router svc/semantic-router route/semantic-router \
        cm/semantic-router-config cm/semantic-router-envoy-config sa/semantic-router --ignore-not-found

@@ -34,40 +34,6 @@ require_login() {
     || die "Not logged in to a cluster. Run: oc login --token=<token> --server=<api-url>"
 }
 
-# Resolve the ClusterIP the router should dial for a model.
-#
-# The stable Service is preferred because its IP survives InferenceService
-# redeploys. If its selector does not match any pod — which happens when a
-# different KServe version labels predictor pods differently — fall back to the
-# predictor Service that KServe generated, and say so loudly, because that IP
-# will change the next time the InferenceService is updated.
-resolve_endpoint_ip() {
-  local stable_svc="$1" model="$2" ip eps
-
-  ip="$(oc get svc "$stable_svc" -n "$NS" -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
-  eps="$(oc get endpoints "$stable_svc" -n "$NS" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)"
-
-  if [[ -n "$ip" && -n "$eps" ]]; then
-    printf '%s' "$ip"
-    return 0
-  fi
-
-  if [[ -n "$ip" && -z "$eps" ]]; then
-    warn "Service $stable_svc exists but has no endpoints — its selector does not match the predictor pods."
-    warn "Predictor pod labels in $NS:"
-    oc get pods -n "$NS" -l "serving.kserve.io/inferenceservice=$model" \
-      -o jsonpath='{range .items[*]}      {.metadata.name}{"\t"}{.metadata.labels}{"\n"}{end}' >&2 2>/dev/null || true
-  fi
-
-  local fallback="${model}-predictor"
-  ip="$(oc get svc "$fallback" -n "$NS" -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
-  [[ -n "$ip" ]] || die "Could not resolve a ClusterIP for $model (tried $stable_svc and $fallback)."
-
-  warn "Falling back to $fallback ($ip). This IP changes when the InferenceService is redeployed —"
-  warn "re-run scripts/wire-endpoints.sh after any model redeploy."
-  printf '%s' "$ip"
-}
-
 router_route_host() {
   oc get route semantic-router -n "$NS" -o jsonpath='{.spec.host}' 2>/dev/null || true
 }

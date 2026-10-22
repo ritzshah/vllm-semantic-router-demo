@@ -52,7 +52,7 @@ Remarkably little, which is the point of the `ORIGINAL_DST` design.
 3. **Repoint the stable Services.** Update the selectors in
    [`stable-services.yaml`](../deploy/models/stable-services.yaml) to target the
    llm-d gateway pods instead of the KServe predictors, so
-   `scripts/wire-endpoints.sh` keeps resolving the right ClusterIPs with no
+   `scripts/apply-router.sh` keeps resolving the right ClusterIPs with no
    change to the script.
 
 4. **Envoy needs no changes at all.** It already forwards to whatever address
