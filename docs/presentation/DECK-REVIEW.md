@@ -123,9 +123,13 @@ is better than the structure I had.
 | Looper patterns | SELECT, CASCADE, FUSION, WORKFLOW |
 | Defence in depth | Routing → guardrails → **egress**; "routing is not enough" |
 | Agentic multiplier | 10–50 model calls per agent task |
-| Project figures | 86% local, 40 ms P50, 80.4% → 98.5% fine-tuned, 11 algorithms |
+| Project figures | 86% local, 40 ms P50, 80.4% → 98.5% fine-tuned, 11 algorithms — all **in-house benchmarks**, labelled as such on-slide |
 
-All of his figures are attributed on-slide as the project's, not ours.
+All of those figures are the project's **in-house** benchmarks, not independent or
+reproduced results, and the slide says so. The 40 ms P50 in particular is an
+internal measurement on different hardware, so our 192 ms is not a like-for-like
+comparison — the "What we measured" slide notes that rather than implying we are
+five times slower.
 
 **Deliberately not adopted**
 

@@ -189,12 +189,12 @@ const DECK = {
       "title": "Stage 3 — Decisions apply policy",
       "intro": "Boolean rules with arbitrary nesting. Priority resolves conflicts — the highest-priority matching decision wins.",
       "columns": [
-        { "heading": "Our ladder", "body": "Guardrails at 1000–1600 (PII, unsafe, jailbreak). Policy overrides at 220–300. Complexity at 140–145. Intent at 90–130. Fallbacks at 10–50, all pointing at the small model." },
+        { "heading": "Our ladder, top to bottom", "body": "Guardrails first — PII, unsafe content, jailbreak. Then policy overrides, like an urgent security review. Then difficulty. Then intent. Anything that matches nothing falls through to the small model." },
         { "heading": "Eligibility before optimisation", "body": "Authorization, local-only processing, modality and context capacity make a route eligible or ineligible before any optimiser compares cost or latency." },
         { "heading": "Detection is not enforcement", "body": "A PII signal reports a match. The decision chooses whether to block, reroute to a local-only model, redact, or merely observe. The same detector, different policy per recipe." }
       ],
-      "callout": "Three-digit gap between guardrails and routing: a cost optimisation can never outrank a safety rule.",
-      "note": "The third column is the governance story and it is far stronger than \"we block PII\". In v0.3 pii stopped being a plugin type entirely — it is a signal, and enforcement belongs to the decision."
+      "callout": "Guardrails sit far above routing, deliberately — no cost optimisation can ever outrank a safety rule.",
+      "note": "Tell the ladder as an order, not as numbers — the priorities are in the config if anyone asks, and the file is on the closing slide. The third column is the governance story and it is far stronger than \"we block PII\": in v0.3 pii stopped being a plugin type entirely, it is a signal, and enforcement belongs to the decision."
     },
 
     {
@@ -232,17 +232,17 @@ const DECK = {
       "type": "table",
       "at": "16:00",
       "title": "What the project reports",
-      "intro": "Figures published by the maintainers. Not ours — we have not reproduced them, and you should re-validate against your own workload.",
+      "intro": "Figures from the project's own in-house benchmarks. Not independently reproduced, and not measured by us — re-validate against your own workload before you quote them.",
       "head": ["Metric", "Reported", "Context"],
       "rows": [
         ["Traffic kept local", "86%", "Simple queries to free local models instead of cloud APIs"],
-        ["Routing latency", "40 ms P50", "~0.4% overhead against inference"],
+        ["Routing latency", "40 ms P50", "In-house benchmark — ~0.4% overhead against inference"],
         ["Complexity accuracy", "80.4% → 98.5%", "Pretrained MiniLM vs their fine-tune; misrouting 19.6% → 1.5%"],
         ["Fine-tune cost", "< 2 h on CPU", "23M-parameter model, drops in as a model swap"],
         ["Selection algorithms", "11", "Static through Elo and Thompson sampling"],
         ["Test-time scaling", "LiveCodeBench 92.6 · GPQA-Diamond 96.0", "A router improving on the models it routes to"]
       ],
-      "source": "reported by the project / Aayush Saini — not reproduced by us",
+      "source": "project in-house benchmarks, via Aayush Saini — not independently reproduced",
       "note": "Read the intro line verbatim. Volunteering that these are someone else's numbers buys more credibility than the numbers do. The fine-tuning finding worth quoting: +18% from the right loss function versus +2% from more data."
     },
 
@@ -253,7 +253,7 @@ const DECK = {
       "intro": "Everything below came off the cluster behind this demo. Including the parts that did not work.",
       "head": ["Finding", "Measured", "So what"],
       "rows": [
-        ["Routing overhead", "192 ms, all signals on CPU", "~19% on a 1 s request, under 3% on a 7 s one. The project reports 40 ms — we run every signal family, and fact_check alone costs 178 ms"],
+        ["Routing overhead", "192 ms, all signals on CPU", "~19% on a 1 s request, under 3% on a 7 s one. Not comparable to the project's 40 ms in-house figure — different hardware, and we run every signal family, with fact_check alone costing 178 ms"],
         ["Guardrail block", "~900 ms, no GPU touched", "Answered by the router itself; a jailbreak costs no inference"],
         ["Cache hit", "6.9 s → 0.75 s", "10× on an identical repeat"],
         ["Cache precision", "1.0000 identical · 0.9650 wrong question · 0.8555 true paraphrase", "The wrong question outscores the paraphrase. At 0.95 it served an append/extend answer to an insert/remove question. Runs at 0.99"],

@@ -84,7 +84,7 @@ baked into weights; MoM is yours, in config, changeable this afternoon.
 | 9:00 | Envoy external processor | Zero code changes. |
 | 10:00 | The pipeline: five stages | Walk it once, slowly. |
 | 11:00 | Signals, and the models behind them | Vela = the project's mmBERT. Swappable. |
-| 12:30 | Decisions apply policy | The priority ladder; detection ≠ enforcement. |
+| 12:30 | Decisions apply policy | The ladder as an *order*, not numbers; detection ≠ enforcement. |
 | 14:00 | Projections and Algorithms | The two stages most demos skip. Loopers. |
 | 15:00 | Recipes | Adopt a policy by changing one string. |
 
@@ -99,8 +99,11 @@ are the most cuttable pair in the deck.
 | 16:00 | What the project reports | Their numbers, labelled as theirs. |
 | 17:00 | **What we measured** | Ours, including the failures. |
 
-Read the intro line on the first one verbatim — "not ours, we have not
-reproduced them". Volunteering that buys more credibility than the numbers do.
+Read the intro line on the first one verbatim — these are the project's own
+**in-house** benchmarks, not independent results. The 40 ms P50 especially: it
+is an internal figure on different hardware, so do not present our 192 ms as
+losing a race. Volunteering the provenance buys more credibility than the
+numbers do.
 
 Then linger on the cache row of the second. An audience that has read a vendor
 slide about semantic caching has been told it understands meaning. Showing the
