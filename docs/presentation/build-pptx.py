@@ -162,8 +162,16 @@ def chrome(slide, source, idx, total, at=None):
 
 
 def notes(slide, text):
-    if text:
-        slide.notes_slide.notes_text_frame.text = text
+    """Speaker script at 14pt — the default notes-master size is too small to
+    read at a lectern, and these are full scripts rather than reminders."""
+    if not text:
+        return
+    tf = slide.notes_slide.notes_text_frame
+    tf.text = text
+    for para in tf.paragraphs:
+        para.space_after = Pt(6)
+        for run in para.runs:
+            run.font.size = Pt(14)
 
 
 def callout(slide, y, text):

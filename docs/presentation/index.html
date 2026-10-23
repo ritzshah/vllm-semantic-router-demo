@@ -253,13 +253,18 @@ table.s-table code, .mono { font-family: var(--mono); font-size: 14px; color: va
   background: var(--accent-deep); transition: width 0.22s ease;
 }
 
+/* The notes are a spoken script, so they are long. 14px with tight leading
+   fits a whole slide's script without scrolling on a laptop; blank lines in
+   the script become real paragraph breaks so it stays scannable. */
 #notes {
   position: fixed; left: 0; right: 0; bottom: 0;
-  max-height: 32vh; overflow-y: auto;
+  max-height: 38vh; overflow-y: auto;
   background: #11161f; border-top: 2px solid var(--accent-deep);
-  padding: 16px 26px; font-size: 16px; line-height: 1.6; color: var(--text-dim);
+  padding: 14px 26px 18px; font-size: 14px; line-height: 1.5; color: var(--text-dim);
   display: none; z-index: 20;
 }
+#notes p { margin: 0 0 0.6em; }
+#notes p:last-child { margin-bottom: 0; }
 #notes.on { display: block; }
 #notes b { color: var(--accent); display: block; font-size: 12px; letter-spacing: 0.1em;
            text-transform: uppercase; margin-bottom: 7px; }
@@ -416,14 +421,17 @@ function show(i) {
   slides.forEach((s, k) => s.classList.toggle('active', k === cur));
   document.getElementById('progress').style.width = ((cur + 1) / N * 100) + '%';
   const note = SLIDES[cur].note;
-  notesEl.innerHTML = note ? `<b>Presenter note</b>${esc(note)}` : '';
+  notesEl.innerHTML = note
+    ? '<b>Speaker script</b>' +
+      note.split(/\n\s*\n/).map((para) => `<p>${esc(para.trim())}</p>`).join('')
+    : '';
   location.hash = String(cur + 1);
   fit();
 }
 
 /* Scale the fixed 1280x720 stage to whatever the window is. */
 function fit() {
-  const pad = notesOn ? window.innerHeight * 0.34 : 0;
+  const pad = notesOn ? window.innerHeight * 0.40 : 0;
   const availW = window.innerWidth;
   const availH = window.innerHeight - pad;
   const scale = Math.min(availW / 1280, availH / 720);

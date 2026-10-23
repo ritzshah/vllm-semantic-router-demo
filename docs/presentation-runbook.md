@@ -25,6 +25,8 @@ the correct direction to be wrong in.
 
 Square brackets are stage directions, not words to say.
 
+The script renders at 14px in the HTML deck and 14pt in the PowerPoint notes pane — large enough to read at a lectern, and sized so the longest slide's script fits the panel without scrolling.
+
 ## The day before
 
 ```bash
