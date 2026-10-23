@@ -357,9 +357,18 @@ def main():
     prs = Presentation()
     prs.slide_width, prs.slide_height = W, H
 
-    total = len(deck["slides"])
-    for idx, sl in enumerate(deck["slides"], start=1):
+    # Slides flagged `hidden` are still written out, but marked hidden so
+    # PowerPoint skips them in a slideshow. Keeps the content one click away
+    # without putting it in the running order.
+    visible = [s for s in deck["slides"] if not s.get("hidden")]
+    total = len(visible)
+    idx = 0
+    for sl in deck["slides"]:
+        if not sl.get("hidden"):
+            idx += 1
         slide = blank(prs)
+        if sl.get("hidden"):
+            slide._element.set("show", "0")
         t = sl["type"]
 
         if t == "title":

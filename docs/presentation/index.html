@@ -396,10 +396,15 @@ function renderSlide(sl, i, n) {
 
 const stage = document.getElementById('stage');
 const notesEl = document.getElementById('notes');
-const N = DECK.slides.length;
+
+// Slides flagged `hidden` stay in deck.js for reference but are dropped from
+// the running order — the content is still worth keeping, it just is not part
+// of the talk. Everything downstream indexes into SLIDES, not DECK.slides.
+const SLIDES = DECK.slides.filter((s) => !s.hidden);
+const N = SLIDES.length;
 
 stage.innerHTML =
-  DECK.slides.map((s, i) => renderSlide(s, i, N)).join('') +
+  SLIDES.map((s, i) => renderSlide(s, i, N)).join('') +
   '<div id="progress"></div>';
 
 const slides = Array.from(stage.querySelectorAll('.slide'));
@@ -410,7 +415,7 @@ function show(i) {
   cur = Math.max(0, Math.min(N - 1, i));
   slides.forEach((s, k) => s.classList.toggle('active', k === cur));
   document.getElementById('progress').style.width = ((cur + 1) / N * 100) + '%';
-  const note = DECK.slides[cur].note;
+  const note = SLIDES[cur].note;
   notesEl.innerHTML = note ? `<b>Presenter note</b>${esc(note)}` : '';
   location.hash = String(cur + 1);
   fit();

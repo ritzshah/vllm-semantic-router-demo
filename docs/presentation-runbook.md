@@ -11,6 +11,20 @@ The demo slides (19–21) carry no cue — that is the second ten minutes.
 
 ---
 
+## Speaker notes
+
+Every slide carries a **spoken script** — what to actually say, not a note
+about what the slide is for. Press **`n`** in the HTML deck to show them under
+the slide, or open the notes pane in PowerPoint.
+
+They are written to the clock: roughly 140 words a minute, sized to each
+slide's cue. Total is about 16½ minutes of speech inside a 20-minute budget,
+which leaves room for pauses, the show of hands on slide 1, and a question or
+two in flight. If you speak faster than that you will finish early, which is
+the correct direction to be wrong in.
+
+Square brackets are stage directions, not words to say.
+
 ## The day before
 
 ```bash
@@ -92,12 +106,15 @@ This is the longest stretch and the easiest place to overrun. If you are behind
 at 12:30, compress Projections/Algorithms and Recipes into one minute — they
 are the most cuttable pair in the deck.
 
-### 4 · Proof (15:00 – 18:00)
+### 4 · Proof (15:00 – 17:20)
 
 | At | Slide | The job |
 |---|---|---|
-| 16:00 | What the project reports | Their numbers, labelled as theirs. |
-| 17:00 | **What we measured** | Ours, including the failures. |
+| 16:00 | What the project reports | Their in-house numbers, labelled as theirs. |
+
+"What we measured" — our own figures — is **hidden** in the deck. Unhide it in
+`deck.js` if you want the measured-evidence story, or keep it as backup for a
+question about whether any of this was actually run.
 
 Read the intro line on the first one verbatim — these are the project's own
 **in-house** benchmarks, not independent results. The 40 ms P50 especially: it
@@ -110,13 +127,13 @@ slide about semantic caching has been told it understands meaning. Showing the
 number where it does not — the wrong question scoring 0.9650 against a true
 paraphrase at 0.8555 — is the most memorable thing in the talk.
 
-### 5 · Enterprise reality (18:00 – 20:00)
+### 5 · Enterprise reality (17:20 – 20:00)
 
 | At | Slide | The job |
 |---|---|---|
-| 18:00 | **Routing is not enough** | Three layers; we implement one and a half. |
-| 18:45 | Where this bites hardest: agents | 10–50 calls per task. |
-| 19:15 | vLLM-SR and llm-d | Complementary. Last slide before the demo. |
+| 17:20 | **Routing is not enough** | Three layers; we implement one and a half. |
+| 18:30 | Where this bites hardest: agents | 10–50 calls per task. |
+| 19:10 | vLLM-SR and llm-d | Complementary. Last slide before the demo. |
 
 Be straight on the first: our demo has no egress controls. Saying so is what
 makes the rest of the deck believable.
